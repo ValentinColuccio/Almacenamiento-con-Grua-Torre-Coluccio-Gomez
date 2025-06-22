@@ -71,16 +71,19 @@ Este proyecto simula un sistema logístico inteligente, con potencial aplicació
 ## 🧪 Estructura del Proyecto (resumen)
 
 ```
-Data/
-├── TransmisionTerminal.py     # Script principal ejecutado en la Raspberry Pi
-├── Deteccion.py               # Módulo de detección con TensorFlow
-├── motores.py                 # Clases para controlar motores paso a paso
-├── cinematica.py              # Biblioteca de cinemática del brazo
-├── comandos/                  # Lógica de interpretación de voz y acciones
-├── arduino/                   # Código fuente para el Arduino (TorreGrua.ino)
-├── etiquetas.txt              # Lista de etiquetas que puede reconocer el modelo
-├── modelos/                   # Modelo de IA (TensorFlow Lite) y su configuración
-└── README.md                  # Este archivo
+doc/
+hardware/
+software/
+├── Pc/
+    ├──TTpower.py                          # Script principal ejecutado en la Pc
+    ├── keras_model.h5                     # Modelo de detección de imagen con TensorFlow
+    ├── vosk-model-small-es-.042/          # Modelo de detección de voz
+├── Raspi/
+    ├── cinematica.py                      # Módulo de cálculo de cinemática del brazo
+    ├── SEpower.py                         # Sccript principal ejecutado en la Raspberry Pi Zero 2WH 
+├── Arduino/                   
+    ├── asdasd.iso                         # asdasd
+README.md                                  # Este archivo
 ```
 
 ## 📈 Aplicaciones Potenciales
