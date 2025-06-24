@@ -82,7 +82,7 @@ software/
     ├── cinematica.py                      # Módulo de cálculo de cinemática del brazo
     ├── SEpower.py                         # Sccript principal ejecutado en la Raspberry Pi Zero 2WH 
 ├── Arduino/                   
-    ├── asdasd.iso                         # asdasd
+    ├── arduino.iso                        # Control de motores
 README.md                                  # Este archivo
 ```
 
