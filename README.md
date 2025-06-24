@@ -96,8 +96,10 @@ README.md                                  # Este archivo
 
 **Valentín Coluccio y Franco Gabriel Gomez**  
 Estudiantes de Ingeniería en Mecatrónica – UNLZ  
-GitHub: [@ValentinColuccio](https://github.com/ValentinColuccio)  
+GitHub: [@ValentinColuccio](https://github.com/ValentinColuccio)
+GitHub: [@FrancoGomez-98](https://github.com/FrancoGomez-98)
 LinkedIn: [valentin-coluccio-804301359](https://www.linkedin.com/in/valentin-coluccio-804301359/)
+Linkedin: [franco-gomez-0a71822a7](https://www.linkedin.com/in/franco-gomez-0a71822a7/)
 
 ---
 
