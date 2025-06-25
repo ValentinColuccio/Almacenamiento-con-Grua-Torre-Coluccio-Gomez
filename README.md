@@ -82,7 +82,7 @@ software/
     ├── cinematica.py                      # Módulo de cálculo de cinemática del brazo
     ├── SEpower.py                         # Sccript principal ejecutado en la Raspberry Pi Zero 2WH 
 ├── Arduino/                   
-    ├── asdasd.iso                         # asdasd
+    ├── arduino.ino                        # Control de motores
 README.md                                  # Este archivo
 ```
 
@@ -95,9 +95,16 @@ README.md                                  # Este archivo
 ## 📚 Autor
 
 **Valentín Coluccio y Franco Gabriel Gomez**  
-Estudiantes de Ingeniería en Mecatrónica – UNLZ  
-GitHub: [@ValentinColuccio](https://github.com/ValentinColuccio)  
-LinkedIn: [valentin-coluccio-804301359](https://www.linkedin.com/in/valentin-coluccio-804301359/)
+Estudiantes de Ingeniería en Mecatrónica – UNLZ 
+
+GitHub: [@ValentinColuccio](https://github.com/ValentinColuccio) 
+
+GitHub: [@FrancoGomez-98](https://github.com/FrancoGomez-98) 
+
+LinkedIn: [valentin-coluccio-804301359](https://www.linkedin.com/in/valentin-coluccio-804301359/) 
+
+Linkedin: [franco-gomez-0a71822a7](https://www.linkedin.com/in/franco-gomez-0a71822a7/) 
+
 
 ---
 
