@@ -14,19 +14,33 @@ from tensorflow.keras.models import load_model   #type: ignore
 
 HOST = '192.168.137.134'
 PORT = 65432
-cam_url = "http://192.168.137.104:4747/video"
-model_path = "C:/Users/valen/OneDrive/Mis cosas/Facu/Cuat/1-5B-Proyecto Final/Codigos/PC/keras_model.h5"
-clases = ['cubito', 'perrito']
+cam_url = "http://192.168.137.225:4747/video"
+model_path = "C:/Users/valen/OneDrive/Mis cosas/Facu/Cuat/GitHub/Almacenamiento-con-Grua-Torre-Coluccio-Gomez/software/PC/keras_model.h5"
+clases = ['bidon uno', 'bidon dos', 'caja', 'carrete', 'libre']
+
 IMG_SIZE = (224, 224)
-THRESHOLD = 0.95
-TIEMPO_REQUERIDO = 7  # en segundos
+THRESHOLD = 0.90
+TIEMPO_REQUERIDO = 3  # en segundos
+
+# --- Forzar uso de GPU si disponible ---
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        tf.config.set_visible_devices(gpus[0], 'GPU')  # usar solo la primera GPU
+        print("✅ GPU habilitada para ejecución.")
+    except RuntimeError as e:
+        print("❌ Error configurando GPU:", e)
+else:
+    print("⚠️ No se detectó GPU.")
 
 # ---------------- VOSK (Reconocimiento de voz) ----------------
 
 mic = queue.Queue()
 Flag = False
 samplerate = 16000
-model_vosk = vosk.Model("C:/Users/valen/OneDrive/Mis cosas/Facu/Cuat/1-5B-Proyecto Final/Codigos/PC/vosk-model-small-es-0.42")
+model_vosk = vosk.Model("C:/Users/valen/OneDrive/Mis cosas/Facu/Cuat/GitHub/Almacenamiento-con-Grua-Torre-Coluccio-Gomez/software/PC/vosk-model-small-es-0.42")
 rec = vosk.KaldiRecognizer(model_vosk, samplerate)
 
 def callback(indata, frames, time, status):
@@ -52,28 +66,49 @@ def deteccion_por_camara(sock):
         input_img = input_img / 255.0
         input_img = np.expand_dims(input_img, axis=0)
 
-        pred = modelo.predict(input_img, verbose=0)
+        with tf.device('/GPU:0'):
+            pred = modelo.predict(input_img, verbose=0)
         idx = np.argmax(pred)
         prob = np.max(pred)
         clase_actual = clases[idx]
+        
+        if clase_actual != 'libre':
+            if prob > THRESHOLD:
+                if clase_actual == ultima_clase:
+                    if time.time() - tiempo_inicio >= TIEMPO_REQUERIDO:
+                        mensaje = f"cam {clase_actual}"
+                        print(f"📷 Enviando por cámara: {mensaje}")
+                        sock.sendall(mensaje.encode())
 
-        if prob > THRESHOLD:
-            if clase_actual == ultima_clase:
-                if time.time() - tiempo_inicio >= TIEMPO_REQUERIDO:
-                    mensaje = f"cam {clase_actual}"
-                    print(f"📷 Enviando por cámara: {mensaje}")
-                    sock.sendall(mensaje.encode())
-                    ultima_clase = None  # reiniciar después de enviar
+                        # 🔁 Esperar hasta que desaparezca el objeto
+                        print("⏳ Esperando a que el objeto desaparezca...")
+                        while True:
+                            ret2, frame2 = cap.read()
+                            if not ret2:
+                                continue
+                            input2 = cv2.resize(frame2, IMG_SIZE)
+                            input2 = input2 / 255.0
+                            input2 = np.expand_dims(input2, axis=0)
+                            pred2 = modelo.predict(input2, verbose=0)
+                            idx2 = np.argmax(pred2)
+                            prob2 = np.max(pred2)
+                            clase2 = clases[idx2]
+                            if clase2 == 'libre':
+                                print("✅ Objeto removido.")
+                                break
+                            time.sleep(0.2)  # evitar uso excesivo de CPU
+
+                        ultima_clase = None  # reiniciar después de desaparecer
+                else:
+                    ultima_clase = clase_actual
+                    tiempo_inicio = time.time()
             else:
-                ultima_clase = clase_actual
-                tiempo_inicio = time.time()
-        else:
-            ultima_clase = None  # reiniciar si probabilidad baja
+                ultima_clase = None  # reiniciar si probabilidad baja
 
         # Mostrar en ventana opcional
         texto = f"{clase_actual} ({prob*100:.1f}%)"
         color = (0, 255, 0) if prob > 0.8 else (0, 255, 255)
-        cv2.putText(frame, texto, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+        cv2.putText(frame, texto, (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
         cv2.imshow("Detección desde DroidCam (IP)", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break

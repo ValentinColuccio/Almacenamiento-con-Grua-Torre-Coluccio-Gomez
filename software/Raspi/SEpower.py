@@ -21,12 +21,10 @@ arduino_listo = threading.Event()
 
 # Registro de ocupación: dos espacios por punto
 ocupacion = {
-    "caja uno": [True, False],
-    "caja dos": [False, False],
-    "caja tres": [False, False],
-    "caja cuatro": [False, False],
-    "cubito": [False, False],
-    "perrito": [False, False]
+    "bidon uno": [False, False],
+    "bidon dos": [False, False],
+    "caja": [True, False],
+    "carrete": [False, False],
     # descarga y carga no se controlan
 }
                         

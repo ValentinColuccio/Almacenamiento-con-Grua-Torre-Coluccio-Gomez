@@ -1,2 +1,5 @@
-0 cubito
-1 perrito
+0 bidon uno
+1 bidon dos
+2 caja
+3 carrete
+4 libre
