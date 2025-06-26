@@ -8,13 +8,13 @@ angulo_actual = 0
 angulo_garra_actual = 0
 
 puntos = {
-    "bidon uno_1": (-5, -5),
-    "bidon uno_2": (-5.5, -5),
-    "bidon dos_1": (-6, -5),
-    "bidon dos_2": (-6.5, -5),
+    "bidon uno_0": (-5, -5),
+    "bidon uno_1": (-5.5, -5),
+    "bidon dos_0": (-6, -5),
+    "bidon dos_1": (-6.5, -5),
     "caja_0": (0, 150),
     "caja_1": (-5.5, -5),
-    "carrete_0": (0, 300),
+    "carrete_0": (0, 150),
     "carrete_1": (-5.5, -6),
     "descarga": (-150, 0),
     "carga": (150, 0)
@@ -92,11 +92,11 @@ def obtener_sec_voz(nombre,idx):
     angulo_final = calcular_angulo_seguro(angulo_destino)
     angulo_garra = calcular_angulo_garra(angulo_final)
     radio_final = calcular_radio_grados(radio)
-    secuencia.append((angulo_final, radio_final, -720, angulo_garra))  # Bajar
+    secuencia.append((angulo_final, radio_final, -1440, angulo_garra))  # Bajar
 
-    # 2. Moverse 60 mm hacia adelante (norte / +Y)
-    x2 = x
-    y2 = y + 60 
+    # 2. Moverse 60 mm hacia adelante (norte / +x)
+    x2 = x + 60
+    y2 = y
     angulo_adelante, radio_adelante = cartesianas_a_polares(x2, y2)
     angulo_final2 = calcular_angulo_seguro(angulo_adelante)
     angulo_garra2 = calcular_angulo_garra(angulo_final2)
@@ -108,11 +108,11 @@ def obtener_sec_voz(nombre,idx):
     angulo3, radio3 = cartesianas_a_polares(x3, y3)
     angulo_final3 = calcular_angulo_seguro(angulo3)
     radio_final3 = calcular_radio_grados(radio3)
-    secuencia.append((angulo_final3, radio_final3, -720, 180))  # Bajar
+    secuencia.append((angulo_final3, radio_final3, -1440, 180))  # Bajar
 
-    # 4. Moverse 60 mm hacia atrás (sur / -Y)
-    x4 = x3
-    y4 = y3 - 60
+    # 4. Moverse 60 mm hacia atrás (sur / -x)
+    x4 = x3 - 60
+    y4 = y3
     angulo4, radio4 = cartesianas_a_polares(x4, y4)
     angulo_final4 = calcular_angulo_seguro(angulo4)
     radio_final4 = calcular_radio_grados(radio4)
@@ -136,8 +136,8 @@ def obtener_entrada_cam(nombre,idx):
     secuencia.append((ang0f, rad0f, -1440, garra0))  # Bajar
 
     # 2. Moverse 60 mm hacia adelante desde carga
-    y1 = y0 + 60
-    ang1, rad1 = cartesianas_a_polares(x0, y1)
+    x1 = x0 + 60
+    ang1, rad1 = cartesianas_a_polares(x1, y0)
     ang1f = calcular_angulo_seguro(ang1)
     garra1 = calcular_angulo_garra(ang1f)
     rad1f = calcular_radio_grados(rad1)
@@ -145,7 +145,7 @@ def obtener_entrada_cam(nombre,idx):
 
     # 3. Ir al punto destino + 60 mm
     x2, y2 = puntos[punto_nombre]
-    y2 += 60
+    x2 += 60
     ang2, rad2 = cartesianas_a_polares(x2, y2)
     ang2f = calcular_angulo_seguro(ang2)
     garra2 = calcular_angulo_garra(ang2f)
@@ -153,8 +153,8 @@ def obtener_entrada_cam(nombre,idx):
     secuencia.append((ang2f, rad2f, -1440, garra2))  # Bajar
 
     # 4. Volver 60 mm atrás
-    y3 = y2 - 60
-    ang3, rad3 = cartesianas_a_polares(x2, y3)
+    x3 = x2 - 60
+    ang3, rad3 = cartesianas_a_polares(x3, y2)
     ang3f = calcular_angulo_seguro(ang3)
     garra3 = calcular_angulo_garra(ang3f)
     rad3f = calcular_radio_grados(rad3)
