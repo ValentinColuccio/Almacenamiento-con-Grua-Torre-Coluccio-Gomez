@@ -64,7 +64,15 @@ El proyecto cuenta con un diseño de ingeniería respaldado por modelos CAD y es
   <em>Esquemático del circuito de potencia y control (Integración de ESP32, Drivers y Raspberry Pi).</em>
 </div>
 
-> **🎬 Demostración en Video:** Para visualizar una simulación animada de la cinemática, los rangos de movimiento y la interacción del modelo de la estructura, revise el archivo `Media/Animacion.mp4`.
+<br>
+
+> **🎬 Demostración del Funcionamiento:** Dale play al video para ver la simulación de la cinemática y los movimientos de la estructura.
+
+<div align="center">
+  <video src="Media/Animacion.mp4" width="750" controls>
+    Tu navegador no soporta el reproductor de video de GitHub.
+  </video>
+</div>
 
 ---
 
@@ -166,12 +174,15 @@ La disposición de los directorios refleja fielmente la organización multidisci
 
 ```bash
 .
-├── 📂 Datasheets/     # Hojas de datos técnicas de componentes.
-├── 📂 Diseños/        # Archivos CAD originales, piezas 3D.
-├── 📂 Doc/            # Documentación.
-├── 📂 Media/          # Recursos multimedia.
-├── 📂 Planos/         # Planos constructivos.
-├── 📂 Scripts/        # Scripts de software.
+├── 📂 Datasheets/     # Hojas de datos técnicas de componentes (ESP32, NEMA, L298N, sensores).
+├── 📂 Diseños/        # Archivos CAD originales, piezas 3D y elementos para manufactura.
+├── 📂 Doc/            # Documentación de Ingeniería: cálculos, memoria técnica y tesis del PFC.
+├── 📂 Media/          # Recursos multimedia y assets visuales utilizados en la documentación:
+│   ├── 📄 Animacion.mp4            # Video animado del comportamiento de la estructura.
+│   ├── 📄 Ensamblaje Completo.PNG  # Imagen del render general en tres dimensiones.
+│   └── 📄 Esquematico.png          # Diagrama circuital y de cableado electrónico de potencia.
+├── 📂 Planos/         # Planos constructivos mecánicos con vistas normalizadas y diagramas eléctricos.
+├── 📂 Scripts/        # Scripts de software secundarios para pruebas de UART, red y calibración de motores.
 └── 📄 README.md       # Documento principal de presentación del repositorio.
 ```
 
@@ -190,6 +201,6 @@ Proyecto de fin de carrera desarrollado por los estudiantes de la Facultad de In
 
 ---
 
-_Desarrollado con rigor ingenieril, enfoque modular y pasión por la robótica aplicada 🚀_
+_Desarrollado con pasión, curiosidad y muchas pruebas y errores 🚀_
 
 </div>
