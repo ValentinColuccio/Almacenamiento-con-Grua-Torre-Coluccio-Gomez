@@ -61,7 +61,7 @@ El proyecto cuenta con un diseño de ingeniería respaldado por modelos CAD y es
 <div align="center">
   <img src="Media/Diagrama_de_Conexion.png" alt="Esquema Electrónico" width="750"/>
   <br>
-  <em>Esquemático del circuito de potencia y control (Integración de ESP32, Drivers L298N y Raspberry Pi).</em>
+  <em>Esquemático del circuito de potencia y control (Integración de ESP32, Drivers L298N, Raspberry Pi, Sensor, Pantalla LCD).</em>
 </div>
 
 <br>
