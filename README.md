@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/JonatanBogadoUNLZ/PPS-Jonatan-Bogado/blob/9952aac097aca83a1aadfc26679fc7ec57369d82/LOGO%20AZUL%20HORIZONTAL%20-%20fondo%20transparente.png" alt="Logo UNLZ" width="400"/>
+<img src="assets/FI-UNLZ.png" alt="Mercado Libre Logo" width="400"/>
 
 <h2 align="center">Facultad de Ingeniería – Universidad Nacional de Lomas de Zamora</h2>
 
