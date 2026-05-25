@@ -102,7 +102,7 @@ graph TD
         PC -->|Hilos Paralelos| ML_Voice[🎙️ ML: Reconocimiento Voz Vosk]
     end
 
-    PC -->|Comunicación Wi-Fi Sockets TCP/IP| RPi[🫀 Raspberry Pi Zero - Máster de Campo]
+    PC -->|Comunicación Wi-Fi Sockets TCP/IP| RPi[🍓 Raspberry Pi Zero - Máster de Campo]
 
     subgraph "Nivel de Coordinación y Lógica (Raspberry Pi)"
         RPi --> Logic[⚙️ Lógica de Misión e Inventario]
@@ -121,10 +121,10 @@ graph TD
     Motors --> Crane[🏗️ Estructura Mecánica Grúa]
     Crane -.->|Retroalimentación Visual| User
 
-    style PC fill:#f9f,stroke:#333,stroke-width:2px
-    style RPi fill:#ff9,stroke:#333,stroke-width:2px
-    style ESP32 fill:#9cf,stroke:#333,stroke-width:2px
-    style User fill:#fff,stroke:#333,stroke-width:2px
+    style PC fill:#f9f,stroke:#333,stroke-width:2px,color:#000
+    style RPi fill:#ff9,stroke:#333,stroke-width:2px,color:#000
+    style ESP32 fill:#9cf,stroke:#333,stroke-width:2px,color:#000
+    style User fill:#fff,stroke:#333,stroke-width:2px,color:#000
 ```
 
 ### Flujo de Trabajo Operativo
