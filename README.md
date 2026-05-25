@@ -1,5 +1,4 @@
-with open("README.md", "w", encoding="utf-8") as f:
-    f.write("""<div align="center">
+<div align="center">
 
 <img src="assets/FI-UNLZ.png" alt="Logo FI UNLZ" width="400"/>
 
