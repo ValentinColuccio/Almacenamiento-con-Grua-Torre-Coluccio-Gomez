@@ -102,7 +102,7 @@ graph TD
         PC -->|Hilos Paralelos| ML_Voice[🎙️ ML: Reconocimiento Voz Vosk]
     end
 
-    PC -->|Comunicación Wi-Fi Sockets TCP/IP| RPi[🍓 Raspberry Pi Zero - Máster de Campo]
+    PC -->|Comunicación Wi-Fi Sockets TCP/IP| RPi[🫀 Raspberry Pi Zero - Máster de Campo]
 
     subgraph "Nivel de Coordinación y Lógica (Raspberry Pi)"
         RPi --> Logic[⚙️ Lógica de Misión e Inventario]
