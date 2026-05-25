@@ -1,6 +1,7 @@
-<div align="center">
+with open("README.md", "w", encoding="utf-8") as f:
+    f.write("""<div align="center">
 
-<img src="assets/FI-UNLZ.png" alt="Mercado Libre Logo" width="400"/>
+<img src="assets/FI-UNLZ.png" alt="Logo FI UNLZ" width="400"/>
 
 <h2 align="center">Facultad de Ingeniería – Universidad Nacional de Lomas de Zamora</h2>
 
@@ -23,7 +24,8 @@
 - [🧠 Descripción General](#-descripción-general)
 - [📸 Galería y Demostraciones](#-galería-y-demostraciones)
 - [🚀 Arquitectura del Sistema](#-arquitectura-del-sistema)
-- [🔌 Protocolos de Comunicación](#-protocolos-de-comunicación)
+- [🔌 Hardware y Esquema de Conexiones](#-hardware-y-esquema-de-conexiones)
+- [📡 Protocolos de Comunicación](#-protocolos-de-comunicación)
 - [📐 Cinemática y Control Embebido](#-cinemática-y-control-embebido)
 - [⚙️ Funcionalidades Clave](#️-funcionalidades-clave)
 - [🛠️ Tecnologías Utilizadas](#️-tecnologías-utilizadas)
@@ -40,7 +42,7 @@ El sistema simula un entorno logístico automatizado de alta complejidad. Integr
 
 1. **Percepción:** Detección y clasificación de objetos en tiempo real mediante visión artificial.
 2. **Decisión:** Procesamiento de lenguaje natural (comandos de voz) y gestión lógica de inventario.
-3. **Actuación:** Movimiento coordinado de precisión para la manipulación, almacenamiento y entrega de cargas.
+3. **Actuación:** Movimiento coordinado de precisión para la manipulación, almacenamiento y entrega de cargas. El diseño mecánico contempla diferentes mecanismos de transmisión, empleando reducción por engranajes para el eje principal (Motor A) y transmisión por cable para el resto de los ejes de la estructura.
 
 > **Evolución Tecnológica:** La arquitectura de control de bajo nivel fue optimizada utilizando un microcontrolador **ESP32** bajo un paradigma de programación estructurada y modular. Esto garantiza una ejecución determinista de tiempo real para el manejo simultáneo de 4 actuadores paso a paso con velocidades independientes.
 
@@ -124,7 +126,6 @@ graph TD
     style RPi fill:#ff9,stroke:#333,stroke-width:2px
     style ESP32 fill:#9cf,stroke:#333,stroke-width:2px
     style User fill:#fff,stroke:#333,stroke-width:2px
-
 ```
 
 ### Flujo de Trabajo Operativo
@@ -135,34 +136,63 @@ graph TD
 
 ---
 
-## 🔌 Protocolos de Comunicación
+## 🔌 Hardware y Esquema de Conexiones
 
-La robustez del sistema se fundamenta en un esquema híbrido de dos niveles:
+Para asegurar la estabilidad del sistema y mitigar ruidos lógicos o caídas de tensión bruscas, todas las referencias de tierra (`GND` de la fuente de alimentación externa, placa de desarrollo ESP32, Raspberry Pi Zero, sensor óptico de proximidad y pantalla LCD) están interconectadas eléctricamente a una única masa común.
 
-* **Sockets TCP/IP (PC ↔ Raspberry Pi):** Comunicación inalámbrica asíncrona mediante sockets TCP sobre una red Wi-Fi local para la transferencia segura de comandos de estado.
-* **Protocolo Serial UART Custom (Raspberry Pi ↔ ESP32):** Conexión física mediante pines RX/TX. Se diseñó un protocolo de tramas para empaquetar coordenadas de grados y enviarlas secuencialmente, asegurando una recepción determinista y libre de ruidos.
+### Asignación de Pines - ESP32 (Etapa de Potencia y Drivers)
+
+| Componente | Motor Asociado | IN1 | IN2 | IN3 | IN4 |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **Driver L298N (A)** | Brazo (Eje Principal) | GPIO 13 | GPIO 12 | GPIO 14 | GPIO 27 |
+| **Driver L298N (B)** | Carro (Traslación) | GPIO 26 | GPIO 25 | GPIO 33 | GPIO 32 |
+| **Driver L298N (C)** | Gancho (Subida/Bajada) | GPIO 16 | GPIO 17 | GPIO 5  | GPIO 18 |
+| **Driver L298N (D)** | Gancho (Rotación) | GPIO 19 | GPIO 21 | GPIO 22 | GPIO 23 |
+
+### Asignación de Pines - Raspberry Pi Zero (Periféricos e Interfaces)
+
+| Componente | VCC (Alimentación) | GND (Tierra) | Señales de Datos / Pines |
+| :--- | :---: | :---: | :--- |
+| **Sensor de Proximidad** | 5V | Masa Común | OUT ➔ Pin 7 (GPIO 4) |
+| **Pantalla LCD (Módulo I2C)** | 5V | Masa Común | SDA ➔ Pin 3 (GPIO 2) <br> SCL ➔ Pin 5 (GPIO 3) |
+
+---
+
+## 📡 Protocolos de Comunicación
+
+La transferencia de datos e instrucciones dentro de la arquitectura distribuida se organiza en dos niveles jerárquicos independientes:
+
+1. **Sockets TCP/IP (PC ↔ Raspberry Pi):** Comunicación inalámbrica bidireccional y asíncrona establecida a través de una red Wi-Fi local. Permite el envío seguro de comandos lógicos de misión y la actualización del estado de inventario en tiempo real.
+2. **Protocolo Serial UART Custom (Raspberry Pi ↔ ESP32):** Conexión física directa cableada por hardware a través de los pines dedicados RX/TX. Para una correcta transferencia de tramas de datos sin pérdidas ni corrupción de bytes, las líneas de comunicación se conectan de manera estrictamente cruzada:
+   * `PIN TX (Raspberry Pi Zero)` ➔ `PIN RX (ESP32)`
+   * `PIN RX (Raspberry Pi Zero)` ➔ `PIN TX (ESP32)`
+   
+   *Soporte de datos:* El intérprete de comandos del firmware del ESP32 está desarrollado con soporte nativo para procesar valores decimales de alta precisión (por ejemplo, comandos de coordenadas como `A:90.45`), permitiendo un control de posición angular y lineal submilimétrico.
 
 ---
 
 ## 📐 Cinemática y Control Embebido
 
-### Modelado Matemático
-* **Parámetros Denavit-Hartenberg (DH):** Definición de los sistemas de coordenadas locales por eslabón (base rotativa, carro de traslación y gancho de elevación).
-* **Matrices de Transformación Homogénea:** Operaciones algebraicas matriciales en la Raspberry Pi para calcular unívoca la cinemática inversa, obteniendo los pasos requeridos para cada motor a partir de un punto (X, Y, Z).
+### Lógica Secuencial de Fases Independientes
+El algoritmo de control embebido ejecuta los movimientos de los 4 actuadores paso a paso siguiendo una estricta máquina de estados con secuencias de fase independientes. Esto previene esfuerzos mecánicos innecesarios y colisiones en el entorno de almacenamiento:
+* **Fase 1 (Posicionamiento de Coordenadas Espaciales):** Se calcula la cinemática y se ejecuta el movimiento en paralelo y simultáneo de los motores A (rotación de brazo), B (traslación de carro) y D (giro de gancho). El sistema bloquea cualquier otra acción hasta que estos tres actuadores hayan alcanzado su posición de destino de forma precisa.
+* **Fase 2 (Manipulación y Elevación):** Una vez concluida y confirmada la Fase 1, el sistema habilita de forma aislada e independiente el movimiento del Motor C para controlar el descenso o ascenso del gancho de carga.
+
+*Optimización Dinámica:* Con el objetivo de mejorar el rendimiento visual, la velocidad de respuesta en las demostraciones y garantizar una traslación directa, la lógica de control del firmware prescinde por completo del uso de rampas de aceleración y desaceleración en los trenes de pulsos de los motores paso a paso.
 
 ### Firmware Embebido Modular
-El código en C++ para el **ESP32** adopta una arquitectura limpia y desacoplada:
-* **Módulo Principal (`Main.ino`):** Orquesta el ciclo de vida y la escucha del puerto serial.
-* **Módulo de Configuración (`Config.cpp / .h`):** Centraliza pines, mapeo de GPIOs y constantes.
-* **Módulo de Motores (`Motor.cpp / .h`):** Implementa lógica orientada a objetos para controlar hasta 4 motores paso a paso de forma simultánea, gestionando perfiles de velocidad independientes.
+El código fuente en C++ estructurado para el entorno del **ESP32** rompe con el esquema de script único y se organiza de forma modular y desacoplada:
+* **Módulo Principal (`Main.ino`):** Administra el lazo de ejecución principal, la inicialización de periféricos y el parseo continuo del buffer del puerto serial.
+* **Módulo de Configuración (`Config.cpp / .h`):** Centraliza de manera ordenada la asignación de GPIOs, constantes de paso, mapeos de hardware y variables globales.
+* **Módulo de Control de Motores (`Motor.cpp / .h`):** Implementa la lógica orientada a objetos para la manipulación simultánea de los actuadores paso a paso con perfiles de velocidad independientes.
 
 ---
 
 ## ⚙️ Funcionalidades Clave
 
-* **Procesamiento Concurrente:** Uso estricto de hilos en Python, evitando que los algoritmos de TensorFlow Lite bloqueen la captura de audio.
-* **NLP (Natural Language Processing):** Interpretación local de comandos verbales en español utilizando Vosk.
-* **Manipulación de Precisión:** Control milimétrico del posicionamiento espacial acoplando la cinemática a la resolución mecánica de los motores.
+* **Procesamiento Concurrente:** Arquitectura de software basada en hilos paralelos (*multithreading*) en Python para evitar bloqueos durante la inferencia de modelos de IA.
+* **Procesamiento de Lenguaje Natural (NLP Local):** Reconocimiento y traducción de comandos de voz en español ejecutado de forma local mediante la API de Vosk sin requerir conexión a internet.
+* **Clasificación Inteligente:** Integración de modelos optimizados de TensorFlow Lite acoplados a OpenCV para la detección de objetos y cálculo automático de coordenadas cartesianas de almacenamiento.
 
 ---
 
@@ -174,23 +204,22 @@ El código en C++ para el **ESP32** adopta una arquitectura limpia y desacoplada
 | **Procesamiento de Voz** | API Vosk (Modelo en Español), Speech Recognition. |
 | **Procesamiento de Campo** | Raspberry Pi OS, Sockets TCP/IP, Álgebra Matricial. |
 | **Control en Tiempo Real** | C++, Framework Arduino / ESP-IDF, Arquitectura Modular. |
-| **Hardware y Potencia** | Microcontrolador ESP32, Drivers L298N, Motores NEMA. |
-| **Diseño e Ingeniería** | SolidWorks, Esquemas Eléctricos, Parámetros DH. |
+| **Hardware y Potencia** | Microcontrolador ESP32, Drivers L298N, Motores Paso a Paso NEMA. |
+| **Diseño e Ingeniería** | SolidWorks (Modelado CAD 3D), Planos Técnicos, Parámetros DH. |
 
 ---
 
 ## 📂 Estructura del Repositorio
-
-La disposición de los directorios refleja fielmente la organización multidisciplinaria del proyecto (Mecánica, Electrónica y Software):
 
 ```bash
 .
 ├── 📂 Datasheets/     # Hojas de datos técnicas de componentes (ESP32, NEMA, L298N, sensores).
 ├── 📂 Diseños/        # Archivos CAD originales, piezas 3D y elementos para manufactura.
 ├── 📂 Doc/            # Documentación de Ingeniería: cálculos, memoria técnica y tesis del PFC.
-├── 📂 Media/          # Recursos multimedia y assets visuales utilizados en la documentación:
+├── 📂 Media/          # Recursos multimedia utilizados en la documentación.
 ├── 📂 Planos/         # Planos constructivos mecánicos con vistas normalizadas y diagramas eléctricos.
 ├── 📂 Scripts/        # Scripts de software secundarios para pruebas de UART, red y calibración de motores.
+├── 📂 assets/         # Archivos utilizados en el documento principal de presentación
 └── 📄 README.md       # Documento principal de presentación del repositorio.
 ```
 
