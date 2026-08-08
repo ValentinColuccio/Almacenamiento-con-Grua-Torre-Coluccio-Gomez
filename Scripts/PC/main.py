@@ -19,6 +19,7 @@ import cv2
 import socket
 import struct
 import numpy as np
+import html as _html
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -76,38 +77,38 @@ class GlobalTab(QWidget):
         
 
     def add_log(self, text):
-        # Limpiar códigos ANSI por si llegan
         clean = ANSI_ESCAPE.sub('', text)
 
-        # Detectar origen
+        # El origen se detecta una sola vez, para todo el bloque recibido
         if clean.startswith("[RPi]"):
-            color = "#4aa3ff"   # azul
-            prefix = "[RPi]"
+            color, prefix = "#4aa3ff", "[RPi]"
         elif clean.startswith("[PC]"):
-            color = "#55ff55"   # verde
-            prefix = "[PC]"
+            color, prefix = "#55ff55", "[PC]"
         elif clean.startswith("[GUI]"):
-            color = "#FFFFFF"   # blanco
-            prefix = "[GUI]"
+            color, prefix = "#FFFFFF", "[GUI]"
         else:
-            color = "#dddddd"
-            prefix = ""
+            color, prefix = "#dddddd", ""
 
-        # Quitar prefijo del mensaje para no duplicarlo
-        msg = clean[len(prefix):].lstrip()
+        # Se quita el prefijo de la primera línea; después se re-agrega a cada una
+        cuerpo = clean[len(prefix):] if prefix else clean
 
-        html = (
-            f'<span style="color:{color};">'
-            f'{prefix} {msg}'
-            f'</span>'
+        for linea in cuerpo.splitlines():
+            linea = linea.strip()
+            if not linea:
+                continue
+
+            seguro = _html.escape(linea)
+            etiqueta = f"{prefix} " if prefix else ""
+
+            self.console.moveCursor(self.console.textCursor().End)
+            self.console.insertHtml(
+                f'<span style="color:{color};">{etiqueta}{seguro}</span><br>'
+            )
+
+        self.console.moveCursor(self.console.textCursor().End)
+        self.console.verticalScrollBar().setValue(
+            self.console.verticalScrollBar().maximum()
         )
-
-        self.console.moveCursor(self.console.textCursor().End)
-        self.console.insertHtml(html + "<br>")
-        self.console.moveCursor(self.console.textCursor().End)
-        self.console.verticalScrollBar().setValue(     
-            self.console.verticalScrollBar().maximum()  
-        ) 
 
 class CameraWidget(QWebEngineView):
     def __init__(self):
@@ -197,9 +198,12 @@ class RaspberryTab(QWidget):
         layout = QVBoxLayout(self)
 
         # Botones
-        self.btn_connect = QPushButton("Conectar SSH")
+        self.btn_connect       = QPushButton("Conectar Estación de Campo")
+        self.btn_start_sepower = QPushButton("Iniciar Control de Campo")
+        self.btn_stop_sepower  = QPushButton("Detener Control de Campo")
+        '''self.btn_connect = QPushButton("Conectar SSH")
         self.btn_start_sepower = QPushButton("Iniciar SEpower")
-        self.btn_stop_sepower = QPushButton("Detener SEpower")
+        self.btn_stop_sepower = QPushButton("Detener SEpower")'''
 
         # Consola
         self.console = QTextEdit()
@@ -388,8 +392,10 @@ class ControlPCTab(QWidget):
         layout = QVBoxLayout(self)
 
         # Botones
-        self.btn_start = QPushButton("Iniciar TTpower")
-        self.btn_stop = QPushButton("Detener TTpower")
+        self.btn_start = QPushButton("Iniciar Percepción")
+        self.btn_stop  = QPushButton("Detener Percepción")
+        '''self.btn_start = QPushButton("Iniciar TTpower")
+        self.btn_stop = QPushButton("Detener TTpower")'''
 
         btn_layout = QHBoxLayout()
         btn_layout.addWidget(self.btn_start)
@@ -552,7 +558,8 @@ class MainWindow(QMainWindow):
         """)
 
         self.global_tab = GlobalTab()
-        self.tabs.addTab(self.global_tab, "GLOBAL")
+        self.tabs.addTab(self.global_tab, "Supervisión")
+        #self.tabs.addTab(self.global_tab, "GLOBAL")
         self.tabs.setStyleSheet("""
             QTabWidget::pane {
                 border: 1px solid #444;
@@ -586,12 +593,14 @@ class MainWindow(QMainWindow):
         self.ssh_worker.output_signal.connect(lambda txt: self.global_tab.add_log("[RPi] " + txt))
         self.raspberry_tab = RaspberryTab(self.ssh_worker)
         self.raspberry_tab.sepower_status_signal.connect(self.update_status)
-        self.tabs.addTab(self.raspberry_tab, "Raspberry / SSH")
+        self.tabs.addTab(self.raspberry_tab, "Estación de Campo")
+        #self.tabs.addTab(self.raspberry_tab, "Raspberry / SSH")
 
         self.ttpower_worker = TTpowerWorker()
         self.ttpower_worker.log_signal.connect(self.global_tab.add_log)
         self.ttpower_worker.status_signal.connect(self.update_status)
-        self.tabs.insertTab(1,ControlPCTab(self.ttpower_worker),"Control PC")
+        self.tabs.insertTab(1, ControlPCTab(self.ttpower_worker), "Estación de Operación")
+        #self.tabs.insertTab(1,ControlPCTab(self.ttpower_worker),"Control PC")
 
 
         #--------------------------------------------------------------------
@@ -635,11 +644,11 @@ class MainWindow(QMainWindow):
             """)
             return lbl
 
-        self.lbl_pc       = make_status_label("PC:")
-        self.lbl_camera   = make_status_label("Cámara:")
-        self.lbl_socket   = make_status_label("Socket:")
-        self.lbl_rpi      = make_status_label("RPi:")
-        self.lbl_esp  = make_status_label("ESP32:")
+        self.lbl_pc       = make_status_label("Operación:")
+        self.lbl_camera   = make_status_label("Visión:")
+        self.lbl_socket   = make_status_label("Enlace:")
+        self.lbl_rpi      = make_status_label("Campo:")
+        self.lbl_esp  = make_status_label("Actuación:")
         
         self.status.addWidget(self.lbl_pc)
         self.status.addWidget(self.lbl_camera)
@@ -647,11 +656,11 @@ class MainWindow(QMainWindow):
         self.status.addWidget(self.lbl_rpi)
         self.status.addWidget(self.lbl_esp)
         
-        self.set_status(self.lbl_pc, "PC: OFF", "#f44336")
-        self.set_status(self.lbl_camera, "Cámara: OFF", "#f44336")
-        self.set_status(self.lbl_socket, "Socket: OFF", "#f44336")
-        self.set_status(self.lbl_rpi, "RPi: OFF", "#f44336")
-        self.set_status(self.lbl_esp, "ESP32: OFF", "#f44336")
+        self.set_status(self.lbl_pc, "Operación: OFF", "#f44336")
+        self.set_status(self.lbl_camera, "Visión: OFF", "#f44336")
+        self.set_status(self.lbl_socket, "Enlace: OFF", "#f44336")
+        self.set_status(self.lbl_rpi, "Campo: OFF", "#f44336")
+        self.set_status(self.lbl_esp, "Actuación: OFF", "#f44336")
         
         # Logs de prueba
         self.global_tab.add_log("[GUI] Interfaz iniciada correctamente.")     
@@ -666,16 +675,16 @@ class MainWindow(QMainWindow):
         elif code == "RPi_ERR":
             self.rpi_ssh_connected = False
             self.rpi_sepower_running = False
-            self.set_status(self.lbl_rpi, "RPi: ERROR", "#f44336")
+            self.set_status(self.lbl_rpi, "Campo: ERROR", "#f44336")
             self.tabs.widget(2).btn_connect.setEnabled(True)
             self.tabs.widget(2).btn_start_sepower.setEnabled(False)
             self.tabs.widget(2).btn_stop_sepower.setEnabled(False)
             self.ssh_worker.esp_ok = False
-            self.set_status(self.lbl_esp, "ESP32: OFF", "#f44336")
+            self.set_status(self.lbl_esp, "Actuación: OFF", "#f44336")
 
         # ---- SEpower ----
         elif code == "RPI_SEP_ON":
-            self.set_status(self.lbl_rpi, "RPi: ON", "#4caf50")
+            self.set_status(self.lbl_rpi, "Campo: ON", "#4caf50")
             self.tabs.widget(2).btn_start_sepower.setEnabled(False)
             self.tabs.widget(2).btn_stop_sepower.setEnabled(True)
 
@@ -686,19 +695,19 @@ class MainWindow(QMainWindow):
             self.tabs.widget(2).btn_start_sepower.setEnabled(True)
             self.tabs.widget(2).btn_stop_sepower.setEnabled(False)
             self.ssh_worker.esp_ok = False
-            self.set_status(self.lbl_esp, "ESP32: OFF", "#f44336")
+            self.set_status(self.lbl_esp, "Actuación: OFF", "#f44336")
             
         # ---- PC ----   
         
         elif code == "PC_ON":
-            self.set_status(self.lbl_pc, "PC: TTpower ON", "#4caf50")
+            self.set_status(self.lbl_pc, "Operación: TTpower ON", "#4caf50")
 
             pc_tab = self.tabs.widget(1)  # Control PC
             pc_tab.btn_start.setEnabled(False)
             pc_tab.btn_stop.setEnabled(True)
 
         elif code == "PC_OFF":
-            self.set_status(self.lbl_pc, "PC: TTpower OFF", "#f44336")
+            self.set_status(self.lbl_pc, "Operación: TTpower OFF", "#f44336")
 
             pc_tab = self.tabs.widget(1)
             pc_tab.btn_start.setEnabled(True)
@@ -707,14 +716,14 @@ class MainWindow(QMainWindow):
         
         # ---- Socket ---- 
         elif code == "SOCKET_ON":
-            self.set_status(self.lbl_socket, "Socket: ON", "#4caf50")
+            self.set_status(self.lbl_socket, "Enlace: ON", "#4caf50")
 
             pc_tab = self.tabs.widget(1)  # Control PC
             pc_tab.btn_start.setEnabled(False)
             pc_tab.btn_stop.setEnabled(True)
 
         elif code == "SOCKET_OFF":
-            self.set_status(self.lbl_socket, "Socket: OFF", "#f44336")
+            self.set_status(self.lbl_socket, "Enlace: OFF", "#f44336")
 
             pc_tab = self.tabs.widget(1)
             pc_tab.btn_start.setEnabled(True)
@@ -722,14 +731,14 @@ class MainWindow(QMainWindow):
             
         # ---- Camara ---- 
         elif code == "CAMARA_ON":
-            self.set_status(self.lbl_camera, "Cámara: ON", "#4caf50")
+            self.set_status(self.lbl_camera, "Visión: ON", "#4caf50")
 
             pc_tab = self.tabs.widget(1)  # Control PC
             pc_tab.btn_start.setEnabled(False)
             pc_tab.btn_stop.setEnabled(True)
 
         elif code == "CAMARA_OFF":
-            self.set_status(self.lbl_camera, "Cámara: OFF", "#f44336")
+            self.set_status(self.lbl_camera, "Visión: OFF", "#f44336")
 
             pc_tab = self.tabs.widget(1)
             pc_tab.btn_start.setEnabled(True)
@@ -737,10 +746,10 @@ class MainWindow(QMainWindow):
         
         # ---- ESP32 ----    
         elif code == "ESP32_ON":
-            self.set_status(self.lbl_esp, "ESP32: ON", "#4caf50")
+            self.set_status(self.lbl_esp, "Actuación: ON", "#4caf50")
 
         elif code == "ESP32_OFF":
-            self.set_status(self.lbl_esp, "ESP32: OFF", "#f44336")
+            self.set_status(self.lbl_esp, "Actuación: OFF", "#f44336")
         
     def set_status(self, label, text, color):
             label.setText(text)
