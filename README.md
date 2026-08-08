@@ -112,7 +112,7 @@ graph TD
     RPi -->|UART Serial Protocolo Propio| ESP32[🔧 ESP32 - Control de Tiempo Real]
 
     subgraph "Nivel de Actuación y Sensores (ESP32)"
-        ESP32 --> Drivers[🔌 Control Drivers L298N]
+        ESP32 --> Drivers[🔌 Control Drivers A4988]
         ESP32 --> Motors[🚙 Motores Paso a Paso NEMA]
     end
 
@@ -163,12 +163,12 @@ Para asegurar la estabilidad del sistema y mitigar ruidos lógicos o caídas de 
 
 ### Asignación de Pines - ESP32 (Etapa de Potencia y Drivers)
 
-| Componente | Motor Asociado | IN1 | IN2 | IN3 | IN4 |
+| Componente | Motor Asociado | Pin STEP | Pin DIR |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| **Driver L298N (A)** | Brazo (Eje Principal) | GPIO 13 | GPIO 12 | GPIO 14 | GPIO 27 |
-| **Driver L298N (B)** | Carro (Traslación) | GPIO 26 | GPIO 25 | GPIO 33 | GPIO 32 |
-| **Driver L298N (C)** | Gancho (Subida/Bajada) | GPIO 16 | GPIO 17 | GPIO 5  | GPIO 18 |
-| **Driver L298N (D)** | Gancho (Rotación) | GPIO 19 | GPIO 21 | GPIO 22 | GPIO 23 |
+| **Driver A4988 (A)** | Brazo (Eje Principal) | GPIO 13 | GPIO 14 |
+| **Driver A4988 (B)** | Carro (Traslación) | GPIO 27 | GPIO 26 |
+| **Driver A4988 (C)** | Gancho (Subida/Bajada) | GPIO 25 | GPIO 33 |
+| **Driver A4988 (D)** | Gancho (Rotación) | GPIO 32 | GPIO 4 |
 
 ### Asignación de Pines - Raspberry Pi Zero (Periféricos e Interfaces)
 
@@ -205,7 +205,7 @@ El algoritmo de control embebido ejecuta los movimientos de los 4 actuadores pas
 El código fuente en C++ estructurado para el entorno del **ESP32** rompe con el esquema de script único y se organiza de forma modular y desacoplada:
 * **Módulo Principal (`Main.ino`):** Administra el lazo de ejecución principal, la inicialización de periféricos y el parseo continuo del buffer del puerto serial.
 * **Módulo de Configuración (`Config.cpp / .h`):** Centraliza de manera ordenada la asignación de GPIOs, constantes de paso, mapeos de hardware y variables globales.
-* **Módulo de Control de Motores (`Motor.cpp / .h`):** Implementa la lógica orientada a objetos para la manipulación simultánea de los actuadores paso a paso con perfiles de velocidad independientes.
+* **Módulo de Control de Motores (`Motor.cpp / .h`):** Implementa la lógica orientada a objetos para la manipulación simultánea de los actuadores mediante la generación de pulsos (STEP) y dirección (DIR) con perfiles de velocidad inyectables en tiempo real.
 
 ---
 
