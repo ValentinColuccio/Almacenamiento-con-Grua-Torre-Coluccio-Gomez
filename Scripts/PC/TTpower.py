@@ -7,12 +7,16 @@ import json
 import numpy as np
 import vosk
 import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+MODELO_VOSK = BASE_DIR / "vosk-model-small-es-0.42"
 
 # --------------- CONFIGURACIÓN ---------------
 
 GUI_MODE = os.environ.get("TT_GUI", "0") == "1"
 
-IP_RPI = '172.28.49.9'
+IP_RPI = "10.109.34.9"
 
 HOST = IP_RPI
 PORT = 65432
@@ -50,7 +54,12 @@ def conectar_camara_socket():
             time.sleep(2)
 
 def reconocimiento_por_voz(colavoz):
-    model_vosk = vosk.Model("C:/Users/valen/OneDrive/Mis cosas/Facu/GitHub/Almacenamiento-con-Grua-Torre-Coluccio-Gomez/software/PC/vosk-model-small-es-0.42")
+    if not MODELO_VOSK.exists():
+        raise FileNotFoundError(
+            f"No se encontró el modelo de Vosk en {MODELO_VOSK}. "
+            "Descargar desde https://alphacephei.com/vosk/models y descomprimir ahí."
+        )
+    model_vosk = vosk.Model(str(MODELO_VOSK))
     rec = vosk.KaldiRecognizer(model_vosk, samplerate)
     mic = queue.Queue()
 
@@ -93,8 +102,8 @@ def deteccion_por_camara(colacam, cola_trigger):
 
                 if data:
                     OBJETOS_VALIDOS = [
-                        "cajauno", "cajados", "cajatres",
-                        "cajacuatro", "cubito", "perrito"
+                        "caja", "bidonuno", "bidondos",
+                        "carrete", "vacio"
                     ]
 
                     objeto_detectado = None
@@ -103,10 +112,12 @@ def deteccion_por_camara(colacam, cola_trigger):
                         if obj in data:
                             objeto_detectado = obj
                             break
-
-                    if objeto_detectado:
+                    if objeto_detectado == "Vacio":
+                        print("[CAM] Detectado: Vacio")
+                        
+                    elif objeto_detectado:
                         # Convertir a formato con espacio (como usa tu sistema)
-                        objeto_formateado = objeto_detectado.replace("caja", "caja ")
+                        objeto_formateado = objeto_detectado.replace("bidon", "bidon ")
 
                         print(f"[CAM] Detectado: {objeto_formateado}")
 
@@ -120,18 +131,22 @@ def deteccion_por_camara(colacam, cola_trigger):
 
 def despachador(colacam, colavoz, cola_trigger):
     sock = conectar_raspiz()
+    sock.settimeout(0.1)
+
     buffer = ""
+
     while True:
         try:
-            data = sock.recv(1024).decode()
-            buffer += data
-            
+            try:
+                data = sock.recv(1024).decode()
+                buffer += data
+            except socket.timeout:
+                pass
+
             while "\n" in buffer:
                 linea, buffer = buffer.split("\n", 1)
                 if linea == "TRIGGER":
                     cola_trigger.put("TRIGGER")
-                    continue
-                
 
             mensaje = None
             if not colacam.empty():
@@ -140,13 +155,14 @@ def despachador(colacam, colavoz, cola_trigger):
                 mensaje = colavoz.get()
 
             if mensaje:
-                #print(f"[SOCKET] Enviando: {mensaje}", flush=True)
                 sock.sendall((mensaje + "\n").encode())
 
         except (ConnectionResetError, BrokenPipeError):
-            print("[SOCKET] Reconectando...", flush=True)
+            print("[SOCKET] Reconectando...")
             sock = conectar_raspiz()
-        time.sleep(0.1)
+            sock.settimeout(0.1)
+
+        time.sleep(0.05)
 
 
 # --------------- EJECUCIÓN PRINCIPAL ---------------

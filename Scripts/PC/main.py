@@ -19,10 +19,14 @@ import cv2
 import socket
 import struct
 import numpy as np
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+TTPOWER_PATH = BASE_DIR / "TTpower.py"
 
 ANSI_ESCAPE = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
 
-IP_RPI = "172.28.49.9"
+IP_RPI = "10.109.34.9"
 
 # ---------------------------
 # TAB GLOBAL
@@ -98,7 +102,9 @@ class GlobalTab(QWidget):
             f'</span>'
         )
 
-        self.console.append(html)
+        self.console.moveCursor(self.console.textCursor().End)
+        self.console.insertHtml(html + "<br>")
+        self.console.moveCursor(self.console.textCursor().End)
         self.console.verticalScrollBar().setValue(     
             self.console.verticalScrollBar().maximum()  
         ) 
@@ -577,7 +583,7 @@ class MainWindow(QMainWindow):
         
         self.ssh_worker = SSHWorker()
         self.ssh_worker.status_signal.connect(self.update_status)
-        self.ssh_worker.output_signal.connect(lambda txt: self.global_tab.add_log("[RPi] " + txt.strip()))
+        self.ssh_worker.output_signal.connect(lambda txt: self.global_tab.add_log("[RPi] " + txt))
         self.raspberry_tab = RaspberryTab(self.ssh_worker)
         self.raspberry_tab.sepower_status_signal.connect(self.update_status)
         self.tabs.addTab(self.raspberry_tab, "Raspberry / SSH")
@@ -664,6 +670,8 @@ class MainWindow(QMainWindow):
             self.tabs.widget(2).btn_connect.setEnabled(True)
             self.tabs.widget(2).btn_start_sepower.setEnabled(False)
             self.tabs.widget(2).btn_stop_sepower.setEnabled(False)
+            self.ssh_worker.esp_ok = False
+            self.set_status(self.lbl_esp, "ESP32: OFF", "#f44336")
 
         # ---- SEpower ----
         elif code == "RPI_SEP_ON":
@@ -677,6 +685,8 @@ class MainWindow(QMainWindow):
             self.tabs.widget(2).btn_connect.setEnabled(False)
             self.tabs.widget(2).btn_start_sepower.setEnabled(True)
             self.tabs.widget(2).btn_stop_sepower.setEnabled(False)
+            self.ssh_worker.esp_ok = False
+            self.set_status(self.lbl_esp, "ESP32: OFF", "#f44336")
             
         # ---- PC ----   
         
@@ -693,6 +703,7 @@ class MainWindow(QMainWindow):
             pc_tab = self.tabs.widget(1)
             pc_tab.btn_start.setEnabled(True)
             pc_tab.btn_stop.setEnabled(False)
+            
         
         # ---- Socket ---- 
         elif code == "SOCKET_ON":
@@ -725,6 +736,11 @@ class MainWindow(QMainWindow):
             pc_tab.btn_stop.setEnabled(False)
         
         # ---- ESP32 ----    
+        elif code == "ESP32_ON":
+            self.set_status(self.lbl_esp, "ESP32: ON", "#4caf50")
+
+        elif code == "ESP32_OFF":
+            self.set_status(self.lbl_esp, "ESP32: OFF", "#f44336")
         
     def set_status(self, label, text, color):
             label.setText(text)
@@ -756,6 +772,8 @@ class SSHWorker(QThread):
         self.client = None
         self.channel = None
         self.running = True
+        self.buffer = ""
+        self.esp_ok = False
 
     def connect_ssh(self):
         try:
@@ -769,6 +787,8 @@ class SSHWorker(QThread):
             )
 
             self.channel = self.client.invoke_shell()
+            self.buffer = ""
+            self.esp_ok = False
             self.output_signal.emit("[GUI] Sesión SSH interactiva iniciada")
             self.status_signal.emit("RPi_OK")
 
@@ -784,7 +804,26 @@ class SSHWorker(QThread):
                 raw = self.channel.recv(4096).decode(errors="ignore")
                 clean = ANSI_ESCAPE.sub('', raw)
                 self.output_signal.emit(clean)
+                
+                # Acumular y analizar solo líneas completas
+                self.buffer += clean
+                while "\n" in self.buffer:
+                    linea, self.buffer = self.buffer.split("\n", 1)
+                    self._analizar_linea(linea.strip())
             self.msleep(50)
+            
+    def _analizar_linea(self, linea):
+        bajo = linea.lower()
+
+        if "esp32" in bajo and "conectada" in bajo:
+            if not self.esp_ok:
+                self.esp_ok = True
+                self.status_signal.emit("ESP32_ON")
+                
+        if "esp32" in bajo and "listo" in bajo:
+            if not self.esp_ok:
+                self.esp_ok = True
+                self.status_signal.emit("ESP32_ON")
 
     def send_command(self, cmd):
         if self.channel:
@@ -811,9 +850,10 @@ class TTpowerWorker(QThread):
         env["TT_GUI"] = "1"   # activa modo GUI en TTpower
 
         self.process = subprocess.Popen(
-            [sys.executable, "C:/Users/valen/OneDrive/Mis cosas/Facu/Final/5B-Proyecto Final/Codigos/V26.4.16.Pruebas/TTpower.py"],
+            [sys.executable, str(TTPOWER_PATH)],
+            cwd=str(BASE_DIR),            
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,   # ← CLAVE
+            stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
             env=env
@@ -835,7 +875,7 @@ class TTpowerWorker(QThread):
                 if msg == "[SOCKET] Conectado a la Raspberry Pi.":
                     self.status_signal.emit("SOCKET_ON")
 
-                elif msg == "asdasdasdasdas":
+                elif "[SOCKET] Error al conectar" in msg:
                     self.status_signal.emit("SOCKET_OFF")
 
                 elif "[CAM] Conectado a la cámara" in msg:

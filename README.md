@@ -10,8 +10,6 @@
 
 ![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![C++](https://img.shields.io/badge/C++-ESP32_IDF-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white)
-![TensorFlow](https://img.shields.io/badge/TensorFlow-Lite-FF6F00?style=for-the-badge&logo=tensorflow&logoColor=white)
-![OpenCV](https://img.shields.io/badge/OpenCV-Computer_Vision-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white)
 ![Hardware](https://img.shields.io/badge/Hardware-Raspberry_Pi_%7C_ESP32-A22846?style=for-the-badge)
 
 </div>
@@ -69,7 +67,7 @@ El proyecto cuenta con un diseño de ingeniería respaldado por modelos CAD y es
 
 ### ⚙️ Modos de Operación Activos
 
-**1. Almacenamiento Automatizado (Visión Artificial)** El sistema detecta e identifica los objetos en el espacio de trabajo para calcular sus coordenadas y almacenarlos de forma autónoma.
+**1. Almacenamiento Automatizado (Visión Artificial)** El sistema detecta e identifica los objetos en el espacio de trabajo para almacenarlos de forma autónoma.
 
 <div align="center">
   <img src="Media/Almacenamiento.gif" alt="Almacenamiento por Visión Artificial" width="750"/>
@@ -189,22 +187,71 @@ El código fuente en C++ estructurado para el entorno del **ESP32** rompe con el
 
 ## ⚙️ Funcionalidades Clave
 
-* **Procesamiento Concurrente:** Arquitectura de software basada en hilos paralelos (*multithreading*) en Python para evitar bloqueos durante la inferencia de modelos de IA.
-* **Procesamiento de Lenguaje Natural (NLP Local):** Reconocimiento y traducción de comandos de voz en español ejecutado de forma local mediante la API de Vosk sin requerir conexión a internet.
-* **Clasificación Inteligente:** Integración de modelos optimizados de TensorFlow Lite acoplados a OpenCV para la detección de objetos y cálculo automático de coordenadas cartesianas de almacenamiento.
+- **Interfaz Hombre-Máquina (HMI):** Aplicación de escritorio desarrollada en
+  PyQt5 que centraliza la operación y supervisión del sistema, organizada en
+  tres pestañas:
+  - *GLOBAL:* visualización en vivo de la imagen del sensor de visión y consola
+    unificada de eventos, con diferenciación por color según el nodo de origen
+    (estación de operación, estación de campo o interfaz).
+  - *Control PC:* arranque y detención supervisada del proceso de percepción y
+    comunicaciones que se ejecuta en la estación de operación.
+  - *Raspberry / SSH:* establecimiento de sesión SSH interactiva con la estación
+    de campo, puesta en marcha y detención remota de su software de control, y
+    envío directo de comandos a la consola del dispositivo.
 
+  Una barra de estado permanente informa la disponibilidad de los cinco
+  elementos del sistema: estación de operación, sensor de visión, enlace de
+  sockets, estación de campo y controlador de tiempo real.
+
+- **Clasificación de Piezas por Visión Industrial:** Identificación de la pieza
+  depositada en la estación de entrada mediante sensor **SensoPart VISOR
+  Object AI**, con detector de clasificación por aprendizaje ejecutado de forma
+  embebida en el propio dispositivo e iluminación integrada. El sensor opera por
+  disparo bajo demanda: la estación de operación envía el comando de trigger y
+  recibe la clase identificada como telegrama por Ethernet TCP/IP.
+
+- **Disparo Automático del Ciclo de Almacenamiento:** El ciclo no lo inicia el
+  operador sino un sensor infrarrojo instalado en la estación de entrada,
+  gestionado por la estación de campo mediante detección por flanco con
+  antirrebote y tiempo de inhibición, evitando disparos espurios y repetidos.
+
+- **Reconocimiento Automático del Habla (ASR Offline):** Transcripción de
+  comandos de voz en español ejecutada localmente mediante la API de Vosk, sin
+  requerir conexión a internet. Incorpora palabra de activación, de modo que el
+  sistema solo interpreta como orden la locución inmediatamente posterior a
+  ella, reduciendo activaciones involuntarias por conversación ambiente.
+
+- **Gestión de Inventario y Asignación de Posiciones:** Registro de ocupación
+  del almacén mantenido por la estación de campo, con dos posiciones asignadas
+  por tipo de pieza. El sistema resuelve automáticamente la posición libre de
+  destino en el almacenamiento y la posición ocupada de origen en el despacho,
+  y rechaza la orden informando por pantalla cuando no hay espacio disponible o
+  cuando no existe la pieza solicitada.
+
+- **Arquitectura de Ejecución Concurrente:** La estación de operación emplea
+  procesos independientes (*multiprocessing*) para la interacción con el sensor
+  de visión, el reconocimiento de voz y el despacho de mensajes, con
+  comunicación entre ellos por colas. La estación de campo emplea hilos
+  (*multithreading*) para la atención del socket, la escucha del controlador de
+  tiempo real, el sensor de disparo, la supervisión de red y la ejecución de
+  secuencias.
+
+- **Supervisión de Enlace y Recuperación Automática:** La estación de campo
+  verifica periódicamente la presencia de la estación de operación en la red y,
+  ante la pérdida sostenida del enlace, reinicia automáticamente su interfaz
+  inalámbrica. Los sockets implementan reconexión automática en ambos extremos.
 ---
 
 ## 🛠️ Tecnologías Utilizadas
-
-| Capa del Proyecto | Tecnologías y Herramientas |
-| :--- | :--- |
-| **Visión Artificial** | Python 3.9+, OpenCV, TensorFlow Lite, Multithreading. |
-| **Procesamiento de Voz** | API Vosk (Modelo en Español), Speech Recognition. |
-| **Procesamiento de Campo** | Raspberry Pi OS, Sockets TCP/IP, Álgebra Matricial. |
-| **Control en Tiempo Real** | C++, Framework Arduino / ESP-IDF, Arquitectura Modular. |
-| **Hardware y Potencia** | Microcontrolador ESP32, Drivers L298N, Motores Paso a Paso NEMA. |
-| **Diseño e Ingeniería** | SolidWorks (Modelado CAD 3D), Planos Técnicos, Parámetros DH. |
+| Capa del Proyecto               | Tecnologías y Herramientas                                                                      |
+| ------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Interfaz y Supervisión**      | Python 3.9+, PyQt5, QtWebEngine, Paramiko (SSH), Multiprocessing, QThread.                      |
+| **Visión Artificial**           | SensoPart VISOR Object AI, SensoPart Configuration Studio, Telegramas sobre sockets TCP/IP.     |
+| **Procesamiento de Voz**        | API Vosk (Modelo en Español), sounddevice, Palabra de activación e intérprete de comandos.      |
+| **Procesamiento de Campo**      | Raspberry Pi OS, Python (threading, queue), Sockets TCP/IP, RPi.GPIO, RPLCD (I2C), Álgebra Matricial. |
+| **Control en Tiempo Real**      | C++, Framework Arduino / ESP-IDF, UART 115200 bps, Protocolo de tramas propio, Arquitectura Modular. |
+| **Hardware y Potencia**         | ESP32, Drivers L298N, Motores Paso a Paso NEMA, Sensor IR, Display LCD 16×2 I2C.                |
+| **Diseño e Ingeniería**         | SolidWorks (Modelado CAD 3D), Planos Técnicos, Parámetros DH.                                   |
 
 ---
 

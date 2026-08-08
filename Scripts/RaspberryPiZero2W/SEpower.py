@@ -9,7 +9,7 @@ import subprocess
 import time
 from RPLCD.i2c import CharLCD #type:ignore
 
-PC_IP = "172.28.49.39"                                                             #FIJATE IP PC
+PC_IP = "10.186.157.39"                                                             #FIJATE IP PC
 
 Espi = serial.Serial('/dev/ttyS0',115200, timeout=1)
 
@@ -34,8 +34,10 @@ conn_global = None
 GPIO.setwarnings(False)
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(PIN_IR, GPIO.IN)
+lock_conn = threading.Lock()
 
-lcd = CharLCD(
+try:
+    lcd = CharLCD(
     i2c_expander='PCF8574',
     address=0x27,
     port=1,
@@ -43,16 +45,16 @@ lcd = CharLCD(
     rows=2,
     charmap='A02',
     auto_linebreaks=True
-)
+    )
+except:
+    pass
 
 # Registro de ocupación: dos espacios por punto
 ocupacion = {
-    "caja uno": [True, True],
-    "caja dos": [True, True],
-    "caja tres": [True, True],
-    "caja cuatro": [True, True],
-    "cubito": [True, True],
-    "perrito": [True, True]
+    "caja": [False, True],
+    "bidon Uno": [False, True],
+    "bidon Dos": [False, True],
+    "carrete": [False, True],
     # descarga y carga no se controlan
 }
 
@@ -110,23 +112,36 @@ def escuchar_socket():
                 conn, addr = s.accept()
                 conn_global = conn
                 print(f"[SOCKET]Conectado por {addr}")
-                pantalla(0)
+                try:pantalla(0) 
+                except:pass
                 with conn:
+                    buffer = ""
+
                     while True:
-                        data = conn.recv(1024)
+                        data = conn.recv(1024).decode()
                         if not data:
                             print("[SOCKET] Cliente desconectado.")
                             break
-                        mensaje = data.decode().strip()
 
-                        if mensaje == "TRIGGER":
-                            continue
-                        
-                        print(f"Mensaje recibido desde PC: {mensaje}")
-                        if mensaje.lower().startswith("cam"):
-                            cola_prioritaria.put(mensaje[3:].strip())
-                        elif mensaje.lower().startswith("voz"):
-                            cola_comandos.put(mensaje[3:].strip())
+                        buffer += data
+
+                        while "\n" in buffer:
+                            linea, buffer = buffer.split("\n", 1)
+                            mensaje = linea.strip()
+
+                            if not mensaje:
+                                continue
+
+                            if mensaje == "TRIGGER":
+                                continue
+
+                            print(f"Mensaje recibido desde PC: {mensaje}")
+
+                            if mensaje.lower().startswith("cam"):
+                                cola_prioritaria.put(mensaje[3:].strip())
+
+                            elif mensaje.lower().startswith("voz"):
+                                cola_comandos.put(mensaje[3:].strip())
         except Exception as e:
             print(f"[SOCKET] Error de conexión: {e}")
             time.sleep(2)
@@ -203,13 +218,14 @@ def sensor_ir_loop():
                     ultimo_trigger = ahora
 
                     print("[IR] TRIGGER")
-
-                    if conn_global:
-                        try:
-                            conn_global.sendall(b"TRIGGER\n")
-                        except:
-                            print("asdadasdasdasdadasd")
-                            pass
+                    
+                    
+                    with lock_conn:
+                        if conn_global:
+                            try:
+                                conn_global.sendall(b"TRIGGER\n")
+                            except:
+                                pass
 
             estado_anterior = estado_actual
 
@@ -223,6 +239,7 @@ def seleccionar_posicion_libre(nombre):
     return None
 
 def procesar_comandos():
+    global secuencia_actual, indice_actual
     global Flag, cola_comandos, cola_prioritaria, esp_listo 
     while True:
         # Revisar primero si hay comandos prioritarios
@@ -249,22 +266,26 @@ def procesar_comandos():
 
                 if idx is None:
                     print(f"No hay objeto en {mensaje} para recoger. Omitido.")
-                    pantalla(5)
+                    try:pantalla(5) 
+                    except:pass
                     continue
 
                 pasos = cin.obtener_sec_voz(mensaje, idx)
                 ocupacion[mensaje][idx] = False  # se libera el espacio
-                pantalla(2, mensaje) 
+                try:pantalla(2, mensaje) 
+                except:pass
 
             elif modo == "cam":
                 idx = seleccionar_posicion_libre(mensaje)
                 if idx is None:
                     print(f"No hay espacio libre en {mensaje}, omitiendo.")
-                    pantalla(4)
+                    try:pantalla(4)
+                    except:pass
                     continue
                 pasos = cin.obtener_entrada_cam(mensaje, idx)
                 ocupacion[mensaje][idx] = True
-                pantalla(1, mensaje)
+                try:pantalla(1, mensaje)
+                except:pass
 
             with lock_estado:
                 secuencia_actual = pasos
@@ -274,8 +295,8 @@ def procesar_comandos():
 
                 estado_pausa.wait()  # ⛔ pausa
 
-                angulo, distancia, subir, garra = secuencia_actual[indice_actual]
-                comando = f"A:{angulo:.1f};B:{distancia:.1f};C:{subir:.1f};D:{int(garra)}\n"
+                # cinematica ya entrega la trama lista (con velocidades por motor)
+                comando = secuencia_actual[indice_actual] + "\n"
 
                 with lock_estado:
                     ultimo_comando = comando
@@ -283,9 +304,9 @@ def procesar_comandos():
                 Espi.write(comando.encode())
                 print(f"Mensaje enviado: {comando.strip()}")
 
-                if not esp_listo.wait(timeout=5):
-                    print("[ESP] Timeout")
-                    continue
+                if not esp_listo.wait(timeout=50):
+                    print("[ESP] Timeout - abortando secuencia")
+                    break
 
                 esp_listo.clear()
 
@@ -293,7 +314,8 @@ def procesar_comandos():
                     indice_actual += 1
 
             print("[SEQ] Secuencia finalizada")
-            pantalla(6)
+            try:pantalla(6) 
+            except:pass
 
             # avisar a PC
             try:
