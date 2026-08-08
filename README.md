@@ -164,7 +164,7 @@ Para asegurar la estabilidad del sistema y mitigar ruidos lógicos o caídas de 
 ### Asignación de Pines - ESP32 (Etapa de Potencia y Drivers)
 
 | Componente | Motor Asociado | Pin STEP | Pin DIR |
-| :--- | :--- | :---: | :---: | :---: | :---: |
+| :--- | :--- | :---: | :---: |
 | **Driver A4988 (A)** | Brazo (Eje Principal) | GPIO 13 | GPIO 14 |
 | **Driver A4988 (B)** | Carro (Traslación) | GPIO 27 | GPIO 26 |
 | **Driver A4988 (C)** | Gancho (Subida/Bajada) | GPIO 25 | GPIO 33 |
