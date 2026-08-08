@@ -125,6 +125,30 @@ graph TD
     style User fill:#fff,stroke:#333,stroke-width:2px,color:#000
 ```
 
+## 🔍 Decisiones de Ingeniería
+
+### Subsistema de visión
+
+La identificación de piezas se resolvía originalmente con un modelo propio
+(TensorFlow Lite + OpenCV) ejecutado en la estación de operación sobre la
+imagen de un teléfono celular. Fue reemplazado por un sensor de visión
+industrial **SensoPart VISOR Object AI**, con clasificador embebido en el
+propio dispositivo.
+
+Ambas soluciones clasifican mediante aprendizaje automático: lo que cambió es
+la plataforma de ejecución y la cadena de adquisición. Como la pieza se
+deposita siempre en la misma posición y el subsistema solo determina de qué
+pieza se trata, el margen de mejora no estaba en el modelo sino en la
+repetibilidad de la imagen de entrada. El teléfono aplica ajustes automáticos
+que no pueden desactivarse; el sensor industrial, con iluminación y óptica
+fijas, elimina esa variabilidad en el origen en lugar de compensarla.
+
+El sensor entrega la clase por Ethernet TCP/IP a la estación de operación —la
+Raspberry Pi Zero no dispone de interfaz Ethernet—, que la traduce en una orden
+de misión hacia campo.
+
+📄 [`Doc/Justificacion-Subsistema-Vision.md`](Doc/Justificacion-Subsistema-Vision.md)
+
 ### Flujo de Trabajo Operativo
 
 1. **Visión e Inteligencia Artificial (PC):** Procesa flujos de video y audio en hilos paralelos (*multi-threading*). Traduce las intenciones del usuario y envía comandos lógicos a la estación de campo.
