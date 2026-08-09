@@ -29,6 +29,7 @@
 - [⚙️ Funcionalidades Clave](#️-funcionalidades-clave)
 - [🛠️ Tecnologías Utilizadas](#️-tecnologías-utilizadas)
 - [📂 Estructura del Repositorio](#-estructura-del-repositorio)
+- [🙏 Agradecimientos](#-agradecimientos)
 - [👤 Autores](#-autores)
 
 ---
@@ -213,18 +214,16 @@ lo que permitió acortar sensiblemente el ciclo de rediseño y prueba.
 | Impresión propia — filamento e insumos (etapa posterior) | 50.000 | 32,89 |
 | **Subtotal** | **130.000** | **85,52** |
 
-> 🙏 **Agradecimiento:** el equipo agradece a **IDEA3D Impresiones** por la
-> asistencia brindada en la fabricación de las primeras piezas del prototipo.
-
 ### Sistema de Visión
 
 | Componente | Cant. | Valor de referencia (ARS) | Valor de referencia (USD) |
 | :--- | :---: | ---: | ---: |
 | Set de cámara SensoPart VISOR Object AI | 1 | a completar | a completar |
 
-> **Nota:** el sistema de visión fue **cedido en préstamo** para el desarrollo del
-> proyecto, por lo que su valor no se imputa al costo real. Se consigna a título
-> informativo para dimensionar el costo de replicación del sistema.
+> **Nota:** el sistema de visión fue **cedido en préstamo por eMove Solutions S.A.**
+> (ver [Agradecimientos](#-agradecimientos)), por lo que su valor no se imputa al
+> costo real. Se consigna a título informativo para dimensionar el costo de
+> replicación del sistema.
 
 ### Resumen
 
@@ -378,7 +377,23 @@ El código fuente en C++ estructurado para el entorno del **ESP32** rompe con el
 ├── 📂 assets/         # Archivos utilizados en el documento principal de presentación
 └── 📄 README.md       # Documento principal de presentación del repositorio.
 ```
+---
+## 🙏 Agradecimientos
 
+El desarrollo de este proyecto contó con la colaboración de terceros cuyo aporte
+excedió lo estrictamente material y permitió elevar el alcance técnico del
+trabajo:
+
+**eMove Solutions S.A.** — por la cesión en préstamo del sensor de visión industrial
+SensoPart VISOR Object AI, y por facilitar el acceso a equipamiento y
+tecnologías de aplicación industrial real. Esa disponibilidad permitió sustituir
+una solución de prototipo por un componente de campo calificado y abordar el
+subsistema de visión con criterios de ingeniería industrial, algo difícil de
+alcanzar en el marco de un proyecto académico.
+
+**IDEA3D Impresiones** — por la asistencia en la fabricación de las primeras
+piezas del prototipo mediante impresión 3D, durante la etapa inicial de
+desarrollo mecánico.
 ---
 
 ## 👤 Autores
