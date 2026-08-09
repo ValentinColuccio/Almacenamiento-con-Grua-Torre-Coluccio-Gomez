@@ -21,6 +21,8 @@
 - [🧠 Descripción General](#-descripción-general)
 - [📸 Galería y Demostraciones](#-galería-y-demostraciones)
 - [🚀 Arquitectura del Sistema](#-arquitectura-del-sistema)
+- [🔍 Decisiones de Ingeniería](#-decisiones-de-ingeniería)
+- [💰 Costos del Proyecto](#-costos-del-proyecto)
 - [🔌 Hardware y Esquema de Conexiones](#-hardware-y-esquema-de-conexiones)
 - [📡 Protocolos de Comunicación](#-protocolos-de-comunicación)
 - [📐 Cinemática y Control Embebido](#-cinemática-y-control-embebido)
@@ -38,7 +40,7 @@ Este repositorio contiene el desarrollo integral (software, hardware, planos y d
 El sistema simula un entorno logístico automatizado de alta complejidad. Integra hardware embebido, modelado cinemático tridimensional e Inteligencia Artificial distribuida para lograr un ciclo autónomo de:
 
 1. **Percepción:** Detección y clasificación de objetos en tiempo real mediante visión artificial.
-2. **Decisión:** Procesamiento de lenguaje natural (comandos de voz) y gestión lógica de inventario.
+2. **Decisión:** Reconocimiento de comandos de voz e interpretación de órdenes, y gestión lógica de inventario.
 3. **Actuación:** Movimiento coordinado de precisión para la manipulación, almacenamiento y entrega de cargas. El diseño mecánico contempla diferentes mecanismos de transmisión, empleando reducción por engranajes para el eje principal (Motor A) y transmisión por cable para el resto de los ejes de la estructura.
 
 > **Evolución Tecnológica:** La arquitectura de control de bajo nivel fue optimizada utilizando un microcontrolador **ESP32** bajo un paradigma de programación estructurada y modular. Esto garantiza una ejecución determinista de tiempo real para el manejo simultáneo de 4 actuadores paso a paso con velocidades independientes.
@@ -93,11 +95,12 @@ El proyecto implementa un modelo de computación distribuida y *Edge Computing*,
 
 ```mermaid
 graph TD
-    User([👤 Usuario]) -->|Voz / Cámara Celular| PC[💻 PC Central - High Power Computing]
+    User([👤 Usuario]) -->|Comandos de voz| PC[💻 Estación de Operación - HMI y Supervisión]
+    VISOR[📷 SensoPart VISOR Object AI - Clasificación embebida] -->|Ethernet TCP/IP| PC
     
-    subgraph "Nivel de Inteligencia y Percepción (PC)"
-        PC -->|Hilos Paralelos| ML_Img[🧠 ML: Detección Objetos TensorFlow]
-        PC -->|Hilos Paralelos| ML_Voice[🎙️ ML: Reconocimiento Voz Vosk]
+    subgraph "Nivel de Supervisión y Operación (PC)"
+        PC -->|Procesos paralelos| HMI[🖥️ Interfaz Hombre-Máquina PyQt5]
+        PC -->|Procesos paralelos| ASR[🎙️ ASR Offline Vosk]
     end
 
     PC -->|Comunicación Wi-Fi Sockets TCP/IP| RPi[🍓 Raspberry Pi Zero - Máster de Campo]
@@ -123,7 +126,16 @@ graph TD
     style RPi fill:#ff9,stroke:#333,stroke-width:2px,color:#000
     style ESP32 fill:#9cf,stroke:#333,stroke-width:2px,color:#000
     style User fill:#fff,stroke:#333,stroke-width:2px,color:#000
+    style VISOR fill:#cfc,stroke:#333,stroke-width:2px,color:#000
 ```
+
+### Flujo de Trabajo Operativo
+
+1. **Supervisión y Percepción (Estación de Operación):** Aloja el HMI, opera el sensor de visión por disparo bajo demanda y ejecuta el reconocimiento del habla en procesos paralelos (*multiprocessing*). Traduce las intenciones del usuario y envía comandos lógicos a la estación de campo.
+2. **Coordinación de Campo (Raspberry Pi):** Gestiona el inventario, interactúa con sensores y traduce las coordenadas espaciales cartesianas a coordenadas angulares y lineales.
+3. **Actuación Dedicada (ESP32):** Recibe de forma secuencial las coordenadas parametrizadas y genera los trenes de pulsos precisos para los drivers de potencia de los motores A, B, C y D.
+
+---
 
 ## 🔍 Decisiones de Ingeniería
 
@@ -149,13 +161,84 @@ de misión hacia campo.
 
 📄 [`Doc/Justificacion-Subsistema-Vision.md`](Doc/Justificacion-Subsistema-Vision.md)
 
-### Flujo de Trabajo Operativo
+## 💰 Costos del Proyecto
 
-1. **Visión e Inteligencia Artificial (PC):** Procesa flujos de video y audio en hilos paralelos (*multi-threading*). Traduce las intenciones del usuario y envía comandos lógicos a la estación de campo.
-2. **Coordinación de Campo (Raspberry Pi):** Gestiona el inventario, interactúa con sensores y traduce las coordenadas espaciales cartesianas a coordenadas angulares y lineales.
-3. **Actuación Dedicada (ESP32):** Recibe de forma secuencial las coordenadas parametrizadas y genera los trenes de pulsos precisos para los drivers de potencia de los motores A, B, C y D.
+Valores de reposición a precio de mercado actual. Conversión a razón de
+**1.520 ARS/USD**. No se imputan la estación de operación (PC), el micrófono ni
+la tarjeta microSD, por tratarse de equipamiento preexistente del equipo.
 
----
+### Electrónica y Control
+
+| Componente | Cant. | Unit. (ARS) | Subtotal (ARS) | Subtotal (USD) |
+| :--- | :---: | ---: | ---: | ---: |
+| Raspberry Pi Zero 2 W | 1 | 45.000 | 45.000 | 29,61 |
+| Microcontrolador ESP32 DevKit | 1 | 12.000 | 12.000 | 7,89 |
+| Driver de motor paso a paso A4988 | 4 | 3.705 | 14.820 | 9,75 |
+| Regulador conmutado step-down LM2596 | 4 | 3.000 | 12.000 | 7,89 |
+| Fuente switching 24 V – 15 A | 1 | 19.199 | 19.199 | 12,63 |
+| Sensor infrarrojo de proximidad | 1 | 2.500 | 2.500 | 1,64 |
+| Display LCD 16×2 con módulo I2C | 1 | 9.000 | 9.000 | 5,92 |
+| Cableado, borneras y conexionado | — | — | 15.000 | 9,87 |
+| **Subtotal** | | | **129.519** | **85,21** |
+
+### Actuadores
+
+| Componente | Cant. | Unit. (ARS) | Subtotal (ARS) | Subtotal (USD) |
+| :--- | :---: | ---: | ---: | ---: |
+| Motor paso a paso NEMA 17 (ejes A y B) | 2 | 22.000 | 44.000 | 28,95 |
+| Motor paso a paso NEMA 17 pancake (ejes C y D) | 2 | 20.018 | 40.036 | 26,34 |
+| **Subtotal** | | | **84.036** | **55,29** |
+
+### Estructura y Mecánica
+
+| Componente | Cant. | Unit. (ARS) | Subtotal (ARS) | Subtotal (USD) |
+| :--- | :---: | ---: | ---: | ---: |
+| Perfilería de aluminio 20×20 y accesorios de unión | — | — | 60.000 | 39,47 |
+| Rodamiento axial | 1 | 6.000 | 6.000 | 3,95 |
+| Hilo de nylon para transmisión por cable | — | — | 4.000 | 2,63 |
+| Tornillería, insertos y elementos de fijación | — | — | 20.000 | 13,16 |
+| **Subtotal** | | | **90.000** | **59,21** |
+
+### Manufactura Aditiva
+
+Los engranajes del eje principal, las poleas de transmisión, los soportes y las
+piezas de carga del almacén fueron fabricados por impresión 3D. La primera etapa
+de piezas se resolvió mediante servicio tercerizado; a partir de la segunda
+iteración del diseño, la fabricación pasó a realizarse con equipamiento propio,
+lo que permitió acortar sensiblemente el ciclo de rediseño y prueba.
+
+| Concepto | Subtotal (ARS) | Subtotal (USD) |
+| :--- | ---: | ---: |
+| Servicio de impresión tercerizado (etapa inicial) | 80.000 | 52,63 |
+| Impresión propia — filamento e insumos (etapa posterior) | 50.000 | 32,89 |
+| **Subtotal** | **130.000** | **85,52** |
+
+> 🙏 **Agradecimiento:** el equipo agradece a **IDEA3D Impresiones** por la
+> asistencia brindada en la fabricación de las primeras piezas del prototipo.
+
+### Sistema de Visión
+
+| Componente | Cant. | Valor de referencia (ARS) | Valor de referencia (USD) |
+| :--- | :---: | ---: | ---: |
+| Set de cámara SensoPart VISOR Object AI | 1 | a completar | a completar |
+
+> **Nota:** el sistema de visión fue **cedido en préstamo** para el desarrollo del
+> proyecto, por lo que su valor no se imputa al costo real. Se consigna a título
+> informativo para dimensionar el costo de replicación del sistema.
+
+### Resumen
+
+| Concepto | ARS | USD |
+| :--- | ---: | ---: |
+| Electrónica y control | 129.519 | 85,21 |
+| Actuadores | 84.036 | 55,29 |
+| Estructura y mecánica | 90.000 | 59,21 |
+| Manufactura aditiva | 130.000 | 85,52 |
+| **Costo total del proyecto** (sin sistema de visión) | **433.555** | **285,23** |
+| Costo de replicación (incluyendo sistema de visión) | a completar | a completar |
+
+*Equipamiento no imputado: estación de operación (PC), micrófono y tarjeta
+microSD, ya disponibles al inicio del proyecto.*
 
 ## 🔌 Hardware y Esquema de Conexiones
 
@@ -180,11 +263,12 @@ Para asegurar la estabilidad del sistema y mitigar ruidos lógicos o caídas de 
 ---
 
 ## 📡 Protocolos de Comunicación
+ 
+La transferencia de datos e instrucciones dentro de la arquitectura distribuida se organiza en tres niveles jerárquicos independientes:
 
-La transferencia de datos e instrucciones dentro de la arquitectura distribuida se organiza en dos niveles jerárquicos independientes:
-
-1. **Sockets TCP/IP (PC ↔ Raspberry Pi):** Comunicación inalámbrica bidireccional y asíncrona establecida a través de una red Wi-Fi local. Permite el envío seguro de comandos lógicos de misión y la actualización del estado de inventario en tiempo real.
-2. **Protocolo Serial UART Custom (Raspberry Pi ↔ ESP32):** Conexión física directa cableada por hardware a través de los pines dedicados RX/TX. Para una correcta transferencia de tramas de datos sin pérdidas ni corrupción de bytes, las líneas de comunicación se conectan de manera estrictamente cruzada:
+1. **Sockets TCP/IP (Sensor de visión ↔ Estación de Operación):** Enlace Ethernet sobre el cual la estación envía el comando de disparo y recibe el telegrama con la clase identificada.
+2. **Sockets TCP/IP (PC ↔ Raspberry Pi):** Comunicación inalámbrica bidireccional y asíncrona establecida a través de una red Wi-Fi local. Permite el envío seguro de comandos lógicos de misión y la actualización del estado de inventario en tiempo real.
+3. **Protocolo Serial UART Custom (Raspberry Pi ↔ ESP32):** Conexión física directa cableada por hardware a través de los pines dedicados RX/TX. Para una correcta transferencia de tramas de datos sin pérdidas ni corrupción de bytes, las líneas de comunicación se conectan de manera estrictamente cruzada:
    * `PIN TX (Raspberry Pi Zero)` ➔ `PIN RX (ESP32)`
    * `PIN RX (Raspberry Pi Zero)` ➔ `PIN TX (ESP32)`
    
@@ -279,11 +363,13 @@ El código fuente en C++ estructurado para el entorno del **ESP32** rompe con el
 
 ---
 
+---
+
 ## 📂 Estructura del Repositorio
 
 ```bash
 .
-├── 📂 Datasheets/     # Hojas de datos técnicas de componentes (ESP32, NEMA, L298N, sensores).
+├── 📂 Datasheets/     # Hojas de datos técnicas de componentes (ESP32, NEMA, A4988, sensores).
 ├── 📂 Diseños/        # Archivos CAD originales, piezas 3D y elementos para manufactura.
 ├── 📂 Doc/            # Documentación de Ingeniería: cálculos, memoria técnica y tesis del PFC.
 ├── 📂 Media/          # Recursos multimedia utilizados en la documentación.
