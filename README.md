@@ -378,22 +378,25 @@ El código fuente en C++ estructurado para el entorno del **ESP32** rompe con el
 └── 📄 README.md       # Documento principal de presentación del repositorio.
 ```
 ---
+
 ## 🙏 Agradecimientos
 
 El desarrollo de este proyecto contó con la colaboración de terceros cuyo aporte
 excedió lo estrictamente material y permitió elevar el alcance técnico del
 trabajo:
 
-**eMove Solutions S.A.** — por la cesión en préstamo del sensor de visión industrial
-SensoPart VISOR Object AI, y por facilitar el acceso a equipamiento y
-tecnologías de aplicación industrial real. Esa disponibilidad permitió sustituir
-una solución de prototipo por un componente de campo calificado y abordar el
-subsistema de visión con criterios de ingeniería industrial, algo difícil de
-alcanzar en el marco de un proyecto académico.
+**eMove Solutions** — empresa en la que se desempeña profesionalmente uno de los
+autores. Se agradece la cesión en préstamo del sensor de visión industrial
+SensoPart VISOR Object AI, y el acceso facilitado a equipamiento y tecnologías de
+aplicación industrial real. Esa disponibilidad permitió sustituir una solución de
+prototipo por un componente de campo calificado y abordar el subsistema de visión
+con criterios de ingeniería industrial, algo difícil de alcanzar en el marco de un
+proyecto académico.
 
 **IDEA3D Impresiones** — por la asistencia en la fabricación de las primeras
 piezas del prototipo mediante impresión 3D, durante la etapa inicial de
 desarrollo mecánico.
+
 ---
 
 ## 👤 Autores
