@@ -175,12 +175,12 @@ la tarjeta microSD, por tratarse de equipamiento preexistente del equipo.
 | Raspberry Pi Zero 2 W | 1 | 45.000 | 45.000 | 29,61 |
 | Microcontrolador ESP32 DevKit | 1 | 12.000 | 12.000 | 7,89 |
 | Driver de motor paso a paso A4988 | 4 | 3.705 | 14.820 | 9,75 |
-| Regulador conmutado step-down LM2596 | 4 | 3.000 | 12.000 | 7,89 |
+| Regulador conmutado step-down LM2596 | 4 | 6.000 | 24.000 | 15,79 |
 | Fuente switching 24 V – 15 A | 1 | 19.199 | 19.199 | 12,63 |
 | Sensor infrarrojo de proximidad | 1 | 2.500 | 2.500 | 1,64 |
 | Display LCD 16×2 con módulo I2C | 1 | 9.000 | 9.000 | 5,92 |
 | Cableado, borneras y conexionado | — | — | 15.000 | 9,87 |
-| **Subtotal** | | | **129.519** | **85,21** |
+| **Subtotal** | | | **141.519** | **93,10** |
 
 ### Actuadores
 
@@ -194,11 +194,11 @@ la tarjeta microSD, por tratarse de equipamiento preexistente del equipo.
 
 | Componente | Cant. | Unit. (ARS) | Subtotal (ARS) | Subtotal (USD) |
 | :--- | :---: | ---: | ---: | ---: |
-| Perfilería de aluminio 20×20 y accesorios de unión | — | — | 60.000 | 39,47 |
-| Rodamiento axial | 1 | 6.000 | 6.000 | 3,95 |
+| Perfilería de aluminio 20×20 | — | — | 40.000 | 26,32 |
+| Rodamiento axial | 1 | 16.000 | 16.000 | 10,53 |
 | Hilo de nylon para transmisión por cable | — | — | 4.000 | 2,63 |
 | Tornillería, insertos y elementos de fijación | — | — | 20.000 | 13,16 |
-| **Subtotal** | | | **90.000** | **59,21** |
+| **Subtotal** | | | **80.000** | **52,63** |
 
 ### Manufactura Aditiva
 
@@ -210,34 +210,29 @@ lo que permitió acortar sensiblemente el ciclo de rediseño y prueba.
 
 | Concepto | Subtotal (ARS) | Subtotal (USD) |
 | :--- | ---: | ---: |
-| Servicio de impresión tercerizado (etapa inicial) | 80.000 | 52,63 |
-| Impresión propia — filamento e insumos (etapa posterior) | 50.000 | 32,89 |
-| **Subtotal** | **130.000** | **85,52** |
+| Servicio de impresión tercerizado (etapa inicial) | 65.000 | 42,76 |
+| Impresión propia — filamento e insumos (etapa posterior) | 20.000 | 13,16 |
+| **Subtotal** | **85.000** | **55,92** |
 
 ### Sistema de Visión
 
-| Componente | Cant. | Valor de referencia (ARS) | Valor de referencia (USD) |
-| :--- | :---: | ---: | ---: |
-| Set de cámara SensoPart VISOR Object AI | 1 | a completar | a completar |
-
-> **Nota:** el sistema de visión fue **cedido en préstamo por eMove Solutions S.A.**
-> (ver [Agradecimientos](#-agradecimientos)), por lo que su valor no se imputa al
-> costo real. Se consigna a título informativo para dimensionar el costo de
-> replicación del sistema.
+El sensor de visión industrial **SensoPart VISOR Object AI** fue cedido en
+préstamo por eMove Solutions para el desarrollo del proyecto (ver
+[Agradecimientos](#-agradecimientos)), por lo que no representa una erogación y
+no se imputa al presupuesto.
 
 ### Resumen
 
 | Concepto | ARS | USD |
 | :--- | ---: | ---: |
-| Electrónica y control | 129.519 | 85,21 |
+| Electrónica y control | 141.519 | 93,10 |
 | Actuadores | 84.036 | 55,29 |
-| Estructura y mecánica | 90.000 | 59,21 |
-| Manufactura aditiva | 130.000 | 85,52 |
-| **Costo total del proyecto** (sin sistema de visión) | **433.555** | **285,23** |
-| Costo de replicación (incluyendo sistema de visión) | a completar | a completar |
+| Estructura y mecánica | 80.000 | 52,63 |
+| Manufactura aditiva | 85.000 | 55,92 |
+| **Costo total del proyecto** | **390.555** | **256,94** |
 
-*Equipamiento no imputado: estación de operación (PC), micrófono y tarjeta
-microSD, ya disponibles al inicio del proyecto.*
+*Equipamiento no imputado: estación de operación (PC), micrófono, tarjeta
+microSD y sensor de visión (cedido en préstamo).*
 
 ## 🔌 Hardware y Esquema de Conexiones
 
@@ -392,6 +387,12 @@ aplicación industrial real. Esa disponibilidad permitió sustituir una solució
 prototipo por un componente de campo calificado y abordar el subsistema de visión
 con criterios de ingeniería industrial, algo difícil de alcanzar en el marco de un
 proyecto académico.
+
+<div align="center">
+  <img src="Media/Sensopart-Visor.jpg" alt="Sensor de visión industrial SensoPart VISOR Object AI" width="100" />
+  <br>
+  <sub><i>Sensor de visión SensoPart VISOR Object AI</i></sub>
+</div>
 
 **IDEA3D Impresiones** — por la asistencia en la fabricación de las primeras
 piezas del prototipo mediante impresión 3D, durante la etapa inicial de
