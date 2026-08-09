@@ -274,7 +274,7 @@ El código fuente en C++ estructurado para el entorno del **ESP32** rompe con el
 | **Procesamiento de Voz**        | API Vosk (Modelo en Español), sounddevice, Palabra de activación e intérprete de comandos.      |
 | **Procesamiento de Campo**      | Raspberry Pi OS, Python (threading, queue), Sockets TCP/IP, RPi.GPIO, RPLCD (I2C), Álgebra Matricial. |
 | **Control en Tiempo Real**      | C++, Framework Arduino / ESP-IDF, UART 115200 bps, Protocolo de tramas propio, Arquitectura Modular. |
-| **Hardware y Potencia**         | ESP32, Drivers L298N, Motores Paso a Paso NEMA, Sensor IR, Display LCD 16×2 I2C.                |
+| **Hardware y Potencia**         | ESP32, Drivers A4988, Motores Paso a Paso NEMA, regulador step Down LM2596, Sensor IR, Display LCD 16×2 I2C.                |
 | **Diseño e Ingeniería**         | SolidWorks (Modelado CAD 3D), Planos Técnicos, Parámetros DH.                                   |
 
 ---
