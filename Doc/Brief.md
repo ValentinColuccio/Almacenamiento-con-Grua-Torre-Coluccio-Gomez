@@ -12,7 +12,7 @@ Ingeniería en Mecatrónica — Universidad Nacional de Lomas de Zamora — 2026
 
 ## De qué se trata
 
-Construimos una maqueta funcional de un depósito automático. Es un depósito sin personas adentro: las cosas entran, el sistema de manera automática las reconoce, las guarda en el lugar que les corresponde, y cuando alguien las necesita, las va a buscar y las trae.
+Construimos una maqueta funcional de un depósito automático. Es un depósito sin personas dentro: las cosas entran, el sistema de manera automática las reconoce, las guarda en el lugar que les corresponde, y cuando alguien las necesita, las va a buscar y las trae.
 
 Lo particular es cómo se piden las cosas: **hablándole**. El operador dice en voz alta qué necesita y el sistema se lo alcanza.
 
@@ -69,7 +69,7 @@ Aunque desde afuera se ve simple, adentro hay tres cosas distintas trabajando en
 Cada una de esas tres partes es un desafío por separado. El trabajo real del proyecto fue lograr que las tres funcionen juntas, al mismo tiempo, sin pisarse y sin equivocarse.
 
 <!-- FOTO 3 → Media/03-detalle-operacion.jpg — un plano cerrado de la grúa levantando o depositando una pieza. Que se vea el detalle mecánico. -->
-![La grúa en operación](../Media/03-detalle-operacion.jpg)
+![La grúa en operación](../Media/02-detalle-operacion.jpg)
 
 ---
 
