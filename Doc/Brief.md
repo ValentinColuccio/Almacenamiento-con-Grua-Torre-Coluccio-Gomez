@@ -54,7 +54,7 @@ Cuando se necesita una pieza, el operador dice "torre" para llamar al sistema y 
 El sistema verifica que esa pieza esté efectivamente guardada, va a buscarla y la deja en la zona de salida.
 
 <!-- VIDEO: el ciclo completo, de punta a punta, sin cortes. Es lo que mejor explica el proyecto. Subir el archivo .mp4 arrastrándolo a un issue o comentario de GitHub y pegar acá el enlace que genera, o dejar el enlace a YouTube. -->
-🎥 **[Ver el sistema funcionando](ENLACE-AL-VIDEO)**
+🎥 **[Ver el sistema funcionando](https://www.youtube.com/playlist?list=PLAaialL0bhKQ)**
 
 ---
 
