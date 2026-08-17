@@ -79,8 +79,6 @@ El sistema está construido y funcionando. Reconoce las piezas, entiende las ór
 
 Todo el prototipo se construyó con un presupuesto de alrededor de 390.000 pesos argentinos (257 USD) —sin contar la cámara, que fue prestada—, con piezas impresas en 3D y componentes que se consiguen en el mercado local.
 
-<!-- FOTO 4 (opcional) → Media/04-armado.jpg — las piezas impresas en 3D antes del armado, o el proceso de montaje. Muestra el trabajo detrás. -->
-
 ---
 
 ## Agradecimientos
