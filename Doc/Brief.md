@@ -12,7 +12,7 @@ Ingeniería en Mecatrónica — Universidad Nacional de Lomas de Zamora — 2026
 
 ## De qué se trata
 
-Construimos una maqueta funcional de un depósito automático. Es un depósito sin personas adentro: las cosas entran, el sistema solas las reconoce, las guarda en el lugar que les corresponde, y cuando alguien las necesita, las va a buscar y las trae.
+Construimos una maqueta funcional de un depósito automático. Es un depósito sin personas adentro: las cosas entran, el sistema de manera automática las reconoce, las guarda en el lugar que les corresponde, y cuando alguien las necesita, las va a buscar y las trae.
 
 Lo particular es cómo se piden las cosas: **hablándole**. El operador dice en voz alta qué necesita y el sistema se lo alcanza.
 
@@ -42,7 +42,7 @@ Piezas grandes acopiadas al aire libre, materiales de obra, bobinas, contenedore
 Alguien apoya una pieza en la zona de entrada. Un sensor detecta que hay algo ahí.
 
 **2. El sistema la reconoce.**
-Una cámara inteligente mira la pieza y decide qué es. No lee un código ni una etiqueta: la reconoce por su forma y su aspecto, igual que lo haría una persona. Puede distinguir entre cuatro tipos de piezas distintas.
+Una cámara inteligente mira la pieza y decide qué es. No lee un código ni una etiqueta: la reconoce por su forma y su aspecto, igual que lo haría una persona. Puede distinguir entre tipos de piezas distintas, en nuestro caso 4.
 
 **3. La grúa la guarda.**
 Sabiendo qué pieza es, el sistema decide en qué lugar del depósito va y le da la orden a la grúa. La grúa gira, se desplaza, baja, la levanta y la deposita en su casillero. Mientras tanto, anota internamente qué hay guardado y dónde.
@@ -77,7 +77,7 @@ Cada una de esas tres partes es un desafío por separado. El trabajo real del pr
 
 El sistema está construido y funcionando. Reconoce las piezas, entiende las órdenes habladas, guarda, recuerda dónde guardó y despacha lo que se le pide.
 
-Todo el prototipo se construyó con un presupuesto de alrededor de 390.000 pesos —sin contar la cámara, que fue prestada—, con piezas impresas en 3D y componentes que se consiguen en el mercado local.
+Todo el prototipo se construyó con un presupuesto de alrededor de 390.000 pesos argentinos (257 USD) —sin contar la cámara, que fue prestada—, con piezas impresas en 3D y componentes que se consiguen en el mercado local.
 
 <!-- FOTO 4 (opcional) → Media/04-armado.jpg — las piezas impresas en 3D antes del armado, o el proceso de montaje. Muestra el trabajo detrás. -->
 
