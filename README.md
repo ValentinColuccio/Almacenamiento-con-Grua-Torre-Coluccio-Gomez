@@ -68,7 +68,7 @@ El proyecto cuenta con un diseño de ingeniería respaldado por modelos CAD y es
 <div align="center">
   <img src="Media/Diagrama_de_Conexion.png" alt="Esquema Electrónico" width="750"/>
   <br>
-  <em>Esquemático del circuito de potencia y control (Integración de ESP32, Drivers L298N, Raspberry Pi, Sensor, Pantalla LCD).</em>
+  <em>Esquemático del circuito de potencia y control (Integración de ESP32, Drivers A4988, Raspberry Pi, Sensor, Pantalla LCD).</em>
 </div>
 
 <br>
@@ -260,7 +260,10 @@ Para asegurar la estabilidad del sistema y mitigar ruidos lógicos o caídas de 
 | **Pantalla LCD (Módulo I2C)** | 5V | Masa Común | SDA ➔ Pin 3 (GPIO 2) <br> SCL ➔ Pin 5 (GPIO 3) |
 
 ---
-
+> 📐 La verificación eléctrica y mecánica del diseño —consumo, dimensionamiento
+> de la fuente, corrientes en pines críticos, carga admisible y pares
+> requeridos— está desarrollada en [Doc/Calculos.md](Doc/Calculos.md).
+---
 ## 📡 Protocolos de Comunicación
  
 La transferencia de datos e instrucciones dentro de la arquitectura distribuida se organiza en tres niveles jerárquicos independientes:
