@@ -16,6 +16,11 @@
 
 ---
 
+> 📄 **[Leé primero el Brief](Doc/Brief.md)** — de qué se trata el proyecto y
+> cuál es su finalidad, explicado sin contenido técnico.
+
+---
+
 ## 📑 Índice
 
 - [🧠 Descripción General](#-descripción-general)
