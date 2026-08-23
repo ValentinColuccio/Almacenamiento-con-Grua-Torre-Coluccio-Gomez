@@ -99,41 +99,11 @@ El proyecto cuenta con un diseño de ingeniería respaldado por modelos CAD y es
 
 El proyecto implementa un modelo de computación distribuida y *Edge Computing*, segmentando las tareas críticas según la capacidad de cómputo:
 
-```mermaid
-graph TD
-    User([👤 Usuario]) -->|Comandos de voz| PC[💻 Estación de Operación - HMI y Supervisión]
-    VISOR[📷 SensoPart VISOR Object AI - Clasificación embebida] -->|Ethernet TCP/IP| PC
-    
-    subgraph "Nivel de Supervisión y Operación (PC)"
-        PC -->|Procesos paralelos| HMI[🖥️ Interfaz Hombre-Máquina PyQt5]
-        PC -->|Procesos paralelos| ASR[🎙️ ASR Offline Vosk]
-    end
-
-    PC -->|Comunicación Wi-Fi Sockets TCP/IP| RPi[🍓 Raspberry Pi Zero - Máster de Campo]
-
-    subgraph "Nivel de Coordinación y Lógica (Raspberry Pi)"
-        RPi --> Logic[⚙️ Lógica de Misión e Inventario]
-        RPi --> Kinematics[📐 Cálculo Cinemática Directa/Inversa]
-        RPi --> Sensors[🚨 Sensores de Proximidad]
-        RPi --> Display[📟 Display LCD]
-    end
-
-    RPi -->|UART Serial Protocolo Propio| ESP32[🔧 ESP32 - Control de Tiempo Real]
-
-    subgraph "Nivel de Actuación y Sensores (ESP32)"
-        ESP32 --> Drivers[🔌 Control Drivers A4988]
-        ESP32 --> Motors[🚙 Motores Paso a Paso NEMA]
-    end
-
-    Motors --> Crane[🏗️ Estructura Mecánica Grúa]
-    Crane -.->|Retroalimentación Visual| User
-
-    style PC fill:#f9f,stroke:#333,stroke-width:2px,color:#000
-    style RPi fill:#ff9,stroke:#333,stroke-width:2px,color:#000
-    style ESP32 fill:#9cf,stroke:#333,stroke-width:2px,color:#000
-    style User fill:#fff,stroke:#333,stroke-width:2px,color:#000
-    style VISOR fill:#cfc,stroke:#333,stroke-width:2px,color:#000
-```
+<div align="center">
+  <img src="Media/arquitectura-sistema-diagrama.png" alt="Arquitectura del sistema" width="750"/>
+  <br>
+  <em>Arquitectura del sistema</em>
+</div>
 
 ### Flujo de Trabajo Operativo
 
