@@ -5,6 +5,7 @@ import queue
 import re
 import RPi.GPIO as GPIO #type:ignore
 import cinematica as cin  # type:ignore
+import json
 import subprocess
 import signal
 import sys
@@ -13,7 +14,10 @@ import time
 import unicodedata
 from RPLCD.i2c import CharLCD #type:ignore
 
-PC_IP = "10.13.16.39"
+# La IP de la PC NO se configura: se aprende del accept() del socket, así que
+# no importa que el celular reparta una distinta en cada arranque. Vale None
+# hasta que TTpower se conecte por primera vez.
+pc_ip = None
 
 Espi = serial.Serial('/dev/ttyS0',115200, timeout=1)
 
@@ -75,10 +79,10 @@ def normalizar(texto):
 # Registro de ocupación: dos espacios por punto.
 # Las claves van SIN tilde: todo lo que entra pasa por normalizar().
 ocupacion = {
-    "caja": [False, True],
-    "bidon uno": [False, True],
-    "bidon dos": [False, True],
-    "carrete": [False, True],
+    "caja": [True, False],
+    "bidon uno": [True, False],
+    "bidon dos": [True, False],
+    "carrete": [True, False],
     # descarga y carga no se controlan
 }
 
@@ -302,8 +306,10 @@ def escuchar_socket():
                 print(f"[SOCKET]Esperando conexión en el puerto {PORT}...")
 
                 global conn_global
+                global pc_ip
                 conn, addr = s.accept()
                 conn_global = conn
+                pc_ip = addr[0]          # el watchdog usa esta, no una constante
                 print(f"[SOCKET]Conectado por {addr}")
                 emitir_ocupacion()   # el HMI arranca con el estante al día
                 try:pantalla(0)
@@ -315,6 +321,7 @@ def escuchar_socket():
                         data = conn.recv(1024).decode()
                         if not data:
                             print("[SOCKET] Cliente desconectado.")
+                            conn_global = None
                             break
 
                         buffer += data
@@ -332,6 +339,14 @@ def escuchar_socket():
                             if mensaje.upper() == "SHUTDOWN":
                                 print("[SOCKET] Orden de apagado recibida desde la PC.", flush=True)
                                 apagar_sepower("comando de voz 'torre salir'")
+
+                            # La cámara miró y no había nada. Es solo un aviso
+                            # para el LCD: no hay secuencia que encolar.
+                            if mensaje.upper() == "VACIO":
+                                print("[CAM] Ningún objeto detectado.", flush=True)
+                                try:pantalla(3)
+                                except:pass
+                                continue
 
                             # Llega por voz ("torre continuar"). Se atiende acá y
                             # no por cola_comandos, porque procesar_comandos está
@@ -360,8 +375,13 @@ def wifi_watchdog():
 
     while True:
         try:
+            if pc_ip is None:
+                # Todavía no se conectó nadie: no hay a quién pinguear
+                time.sleep(CHEQUEO_CADA)
+                continue
+
             ok = subprocess.run(
-                ["ping", "-c", "1", "-W", "2", PC_IP],
+                ["ping", "-c", "1", "-W", "2", pc_ip],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=4
@@ -369,7 +389,7 @@ def wifi_watchdog():
 
             if ok:
                 if not pc_presente:
-                    print("[WATCHDOG] PC detectada. Watchdog activo.")
+                    print(f"[WATCHDOG] PC detectada en {pc_ip}. Watchdog activo.")
                 pc_presente = True
                 fallo = 0
             else:
@@ -411,58 +431,168 @@ def escuchar_esp():
         time.sleep(0.005)      # antes era un busy-loop al 100% de CPU
     print("[ESP32] Lectura serie detenida.", flush=True)
 
+# Celda que se está calibrando y última altura mandada. Solo los toca el panel
+# de Calibración del HMI.
+calib_punto = None
+calib_cual = None
+calib_altura = None
+
+
+def emitir_tabla_alturas():
+    """Publica la tabla completa para el panel de Calibración."""
+    datos = {n: dict(zip(cin.CUALES, a)) for n, a in cin.ALTURAS.items()}
+    print("[CALIB] TABLA " + json.dumps(datos, ensure_ascii=False), flush=True)
+
+
+def _calibracion(linea):
+    """Comandos 'calib ...' del panel del HMI.
+
+    Los movimientos NO se mandan desde acá: se encolan en cola_prioritaria para
+    que los ejecute procesar_comandos, y así heredan la pausa, la parada de
+    emergencia y el handshake de 'listo' sin duplicar nada.
+    """
+    global calib_punto, calib_cual, calib_altura
+
+    partes = linea.split()
+    sub = partes[1].lower() if len(partes) > 1 else ""
+
+    if sub == "tabla":
+        cin.cargar_alturas()
+        emitir_tabla_alturas()
+        return
+
+    if sub == "ir" and len(partes) >= 4:
+        if en_movimiento.is_set():
+            print("[CALIB][ERR] Hay una secuencia en curso.", flush=True)
+            return
+        punto, cual = " ".join(partes[2:-1]), partes[-1]
+        try:
+            altura = getattr(cin.alturas_de(punto), cual)
+        except (ValueError, AttributeError) as e:
+            print(f"[CALIB][ERR] {e}", flush=True)
+            return
+        calib_punto, calib_cual, calib_altura = punto, cual, altura
+        cola_prioritaria.put(("calib", "ir", punto, cual, altura))
+        return
+
+    if sub == "jog" and len(partes) >= 3:
+        if calib_altura is None:
+            print("[CALIB][ERR] Primero llevá la pala a un punto con 'calib ir'.", flush=True)
+            return
+        if en_movimiento.is_set():
+            print("[CALIB][ERR] Hay una secuencia en curso.", flush=True)
+            return
+        try:
+            destino = calib_altura + int(partes[2])
+        except ValueError:
+            print("[CALIB][ERR] El salto tiene que ser un número entero.", flush=True)
+            return
+        if not (cin.ALTURA_MINIMA <= destino <= cin.ALTURA_ARRIBA):
+            print(f"[CALIB][ERR] {destino} queda fuera del rango permitido "
+                  f"({cin.ALTURA_MINIMA} a {cin.ALTURA_ARRIBA}).", flush=True)
+            return
+        calib_altura = destino          # acumula acá: la cola es FIFO y se
+        cola_prioritaria.put(("calib", "jog", destino))   # ejecuta en orden
+        return
+
+    if sub == "set":
+        if calib_punto is None:
+            print("[CALIB][ERR] No hay ninguna celda en calibración.", flush=True)
+            return
+        valor = int(partes[2]) if len(partes) > 2 else calib_altura
+        try:
+            cin.fijar_altura(calib_punto, calib_cual, valor)
+        except ValueError as e:
+            print(f"[CALIB][ERR] {e}", flush=True)
+            return
+        print(f"[CALIB] Guardado {calib_punto}.{calib_cual} = {valor}", flush=True)
+        emitir_tabla_alturas()
+        return
+
+    print("[CALIB][ERR] Uso: calib tabla | calib ir <punto> <cual> | "
+          "calib jog <delta> | calib set [valor]", flush=True)
+
+
 def escuchar_consola():
     """Lee lo que se tipea en la consola SSH del HMI.
 
+    'ping'         -> responde 'pong' (para verificar que este canal vive)
     'esp <trama>'  -> se reenvía tal cual a la ESP32 por serie
     'shutdown'     -> apaga SEpower igual que el comando de voz
-    """
-    while not parando.is_set():
-        linea = sys.stdin.readline()
-        if not linea:          # EOF: se cerró la sesión
-            break
 
-        linea = linea.strip()
-        if not linea:
-            continue
+    Este hilo depende de que SEpower esté en primer plano de la sesión SSH. Si
+    se muere o le cierran la entrada, los botones del HMI dejan de llegar sin
+    ningún síntoma, así que acá se avisa fuerte en los dos casos."""
+    print("[CONSOLA] Lector de consola activo. Probá con 'ping'.", flush=True)
+    motivo = "apagado normal"
 
-        if linea.lower().startswith("esp "):
-            trama = linea[4:].strip()
-            if not trama:
+    try:
+        while not parando.is_set():
+            try:
+                linea = sys.stdin.readline()
+            except Exception as e:
+                motivo = f"error leyendo la entrada: {e}"
+                break
+
+            if not linea:               # EOF: nos cerraron la entrada
+                motivo = "entrada cerrada (EOF)"
+                break
+
+            linea = linea.strip()
+            if not linea:
                 continue
 
-            if indice_actual < len(secuencia_actual):
-                print("[CONSOLA][AVISO] Hay una secuencia en curso: "
-                      "la trama manual puede interferir.", flush=True)
-            try:
-                Espi.write((trama + "\n").encode())
-                Espi.flush()
-                print(f"[CONSOLA] Enviado a la ESP32: {trama}", flush=True)
-            except Exception as e:
-                print(f"[CONSOLA][ERR] No se pudo enviar a la ESP32: {e}", flush=True)
+            if linea.lower() == "ping":
+                print("[CONSOLA] pong", flush=True)
 
-        elif linea.lower() in ("emergencia", "parada"):
-            parada_emergencia("botón del HMI")
+            elif linea.lower().startswith("esp "):
+                trama = linea[4:].strip()
+                if not trama:
+                    continue
 
-        elif linea.lower() in ("desenclavar", "desbloquear"):
-            desenclavar()
+                if indice_actual < len(secuencia_actual):
+                    print("[CONSOLA][AVISO] Hay una secuencia en curso: "
+                          "la trama manual puede interferir.", flush=True)
+                try:
+                    Espi.write((trama + "\n").encode())
+                    Espi.flush()
+                    print(f"[CONSOLA] Enviado a la ESP32: {trama}", flush=True)
+                except Exception as e:
+                    print(f"[CONSOLA][ERR] No se pudo enviar a la ESP32: {e}", flush=True)
 
-        elif linea.lower() in ("continuar", "reanudar"):
-            continuar_secuencia()
+            elif linea.lower() in ("emergencia", "parada"):
+                parada_emergencia("botón del HMI")
 
-        elif linea.lower() == "home":
-            if en_movimiento.is_set():
-                print("[HOME] La grúa está en movimiento: primero pará la secuencia.", flush=True)
+            elif linea.lower() in ("desenclavar", "desbloquear"):
+                desenclavar()
+
+            elif linea.lower() in ("continuar", "reanudar"):
+                continuar_secuencia()
+
+            elif linea.lower().startswith("calib"):
+                _calibracion(linea)
+
+            elif linea.lower() == "home":
+                if en_movimiento.is_set():
+                    print("[HOME] La grúa está en movimiento: primero pará la secuencia.", flush=True)
+                else:
+                    print("[HOME] Regreso a reposo pedido.", flush=True)
+                    cola_prioritaria.put("__HOME__")
+
+            elif linea.upper() == "SHUTDOWN":
+                apagar_sepower("comando manual desde la consola")
+
             else:
-                print("[HOME] Regreso a reposo pedido.", flush=True)
-                cola_prioritaria.put("__HOME__")
+                print(f"[CONSOLA] '{linea}' no es un comando de SEpower. "
+                      "Usá 'esp <trama>' para hablarle a la ESP32.", flush=True)
 
-        elif linea.upper() == "SHUTDOWN":
-            apagar_sepower("comando manual desde la consola")
+    except Exception as e:
+        motivo = f"excepción inesperada: {e}"
 
-        else:
-            print(f"[CONSOLA] '{linea}' no es un comando de SEpower. "
-                  "Usá 'esp <trama>' para hablarle a la ESP32.", flush=True)
+    finally:
+        if not parando.is_set():
+            print(f"[CONSOLA][ERR] LECTOR DE CONSOLA DETENIDO ({motivo}). "
+                  "Los comandos del HMI ya no van a llegar.", flush=True)
 
 def sensor_ir_loop():
     global ultimo_trigger
@@ -553,7 +683,22 @@ def procesar_comandos():
         print(f"[{modo.upper()}] Procesando: {mensaje}")
 
         try:
-            if mensaje == "__HOME__":
+            if isinstance(mensaje, tuple) and mensaje[0] == "calib":
+                # Movimiento del panel de Calibración. Se ejecuta con el mismo
+                # bucle que las secuencias, así hereda pausa, emergencia y el
+                # handshake de 'listo' sin duplicar nada.
+                if mensaje[1] == "ir":
+                    _, _, punto, cual, altura = mensaje
+                    pasos, _sin_uso = cin.pose_calibracion(punto, cual, altura)
+                    print(f"[OPER] calibrando {punto} · {cual}", flush=True)
+                    print(f"[CALIB] POSE {punto} {cual} C={altura}", flush=True)
+                else:
+                    _, _, altura = mensaje
+                    pasos, _sin_uso = cin.paso_jog(altura)
+                    print(f"[CALIB] C={altura}", flush=True)
+                fases = [cin.FASE_CALIBRAR] * len(pasos)
+
+            elif mensaje == "__HOME__":
                 # Regreso manual a reposo pedido desde el HMI
                 pasos, fases = cin.secuencia_home()
                 print("[OPER] regreso a home", flush=True)
@@ -667,6 +812,20 @@ def _senal_apagado(signum, frame):
 
 signal.signal(signal.SIGINT, _senal_apagado)
 signal.signal(signal.SIGTERM, _senal_apagado)
+
+# Fecha del archivo: sirve para saber de un vistazo si la Raspberry tiene la
+# versión al día. Sin esto, un SEpower viejo se ve idéntico salvo por los
+# comandos que le faltan, y el síntoma es "no es un comando de SEpower".
+try:
+    _sello = time.strftime("%Y-%m-%d %H:%M",
+                           time.localtime(os.path.getmtime(__file__)))
+    _sello_cin = time.strftime("%Y-%m-%d %H:%M",
+                               time.localtime(os.path.getmtime(cin.__file__)))
+    print(f"[SEP] SEpower {_sello} | cinematica {_sello_cin}", flush=True)
+    print("[SEP] Comandos: ping, esp, emergencia, desenclavar, continuar, "
+          "home, calib, shutdown", flush=True)
+except Exception:
+    pass
 
 # Iniciar los hilos
 hilo_socket = threading.Thread(target=escuchar_socket, daemon=True)

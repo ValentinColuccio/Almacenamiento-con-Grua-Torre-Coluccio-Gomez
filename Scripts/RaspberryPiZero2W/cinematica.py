@@ -1,4 +1,7 @@
+import json
 import math
+from collections import namedtuple
+from pathlib import Path
 
 ORIGEN_X = 0
 ORIGEN_Y = 0
@@ -12,44 +15,21 @@ radio_actual = 0          # último radio pedido, para poder armar el regreso a 
 DIST_ENGANCHE = 200        # mm que avanza para enganchar / retrocede para soltar
 RADIO_MINIMO = 100         # mm: radio más chico al que puede ir la pala
 
+# Tope inferior del eje C. Es una guarda de seguridad, no una altura de trabajo:
+# ni la tabla ALTURAS ni el jog del panel de calibración pueden bajar de acá.
+# VALOR PROVISORIO: hay que medir cuál es la altura más baja a la que la pala
+# puede ir sin tocar nada en el peor punto del estante.
+ALTURA_MINIMA = -1300
+
 # Alturas del eje C (0 = arriba, negativo = abajo), en unidades del ESP.
 ALTURA_ARRIBA = 0        # pala recogida: altura de tránsito
-ALTURA_APOYO  = -1000    # altura de la superficie donde descansa la carga
 
-# Compensación del cabeceo de la pala, con un valor propio para cada maniobra.
-# B y C comparten el accionamiento por hilos: al AVANZAR el hilo se afloja y la
-# pala cabecea nariz abajo, así que hay que pedirle a C que vaya más arriba para
-# que la punta termine a la altura correcta. Al RETROCEDER el hilo toma tensión y
-# la pala queda casi recta, o sea que el cabeceo no es simétrico y estos dos
-# valores no tienen por qué parecerse. Se ajustan por separado.
-#
-# Son offsets sobre ALTURA_APOYO: positivo = más arriba, negativo = más abajo.
-# El ángulo y el radio NO se tocan, la corrección es solo sobre C.
-# El avance de enganche se hace en dos tramos, con una bajada en el medio:
-# se entra la primera mitad a COMP_TOMA, se baja a COMP_TOMA2 y se completa el
-# recorrido. El retroceso de la dejada sigue siendo una sola tirada.
-COMP_TOMA   = -80       # C respecto del apoyo para el primer tramo del avance
-COMP_TOMA2  = -120       # C respecto del apoyo para el segundo tramo del avance
-COMP_DEJADA = -15        # C respecto del apoyo al soltar (B retrocede)
+# Las alturas de TRABAJO no son globales: cada punto tiene las suyas, porque la
+# superficie no está pareja. Están en la tabla ALTURAS, más abajo, pegada a la
+# definición de los puntos para que se lean juntas.
 
 FRAC_TRAMO1 = 0.5   # parte del recorrido que se hace en el primer tramo
 
-ALTURA_TOMA   = ALTURA_APOYO + COMP_TOMA      # entrar al pallet
-ALTURA_TOMA2  = ALTURA_APOYO + COMP_TOMA2     # completar el enganche
-ALTURA_DEJADA = ALTURA_APOYO + COMP_DEJADA    # dejar el pallet en la descarga
-
-# --- Dejada en el ESTANTE (modo cam) ---
-# Guardar un pallet en el estante tiene alturas propias, independientes de las
-# del punto de descarga: se apoya a COMP_GUARDADO y el retiro se hace en dos
-# tramos, igual que el avance de la toma, con una altura por tramo.
-# VALORES DE ARRANQUE: ajustar contra la máquina.
-COMP_GUARDADO = -150     # C respecto del apoyo al apoyar el pallet en el estante
-COMP_RETIRO1  = -150    # C para el primer tramo del retiro
-COMP_RETIRO2  = -130    # C para el segundo tramo del retiro
-
-ALTURA_GUARDADO = ALTURA_APOYO + COMP_GUARDADO
-ALTURA_RETIRO1  = ALTURA_APOYO + COMP_RETIRO1
-ALTURA_RETIRO2  = ALTURA_APOYO + COMP_RETIRO2
 
 # La carga se traslada con la pala girada. El giro se hace a media subida (y a
 # media bajada), con la carga ya despegada del apoyo pero todavía abajo.
@@ -69,6 +49,11 @@ FASE_DEJAR     = "Dejando la carga"
 FASE_HOME      = "Volviendo a home"
 
 FASES = [FASE_APROXIMAR, FASE_ENGANCHAR, FASE_TRASLADAR, FASE_DEJAR, FASE_HOME]
+
+# Los movimientos del panel de Calibración NO son parte del ciclo, así que esta
+# fase queda FUERA de FASES: no es un sexto paso de la lista. El HMI la trata
+# como un estado aparte.
+FASE_CALIBRAR = "Calibrando"
 
 # --- Velocidades por motor (unidades del ESP). Ajustables a mano. ---
 # Protocolo de trama: en la PRIMERA trama de la secuencia se envían las 4
@@ -92,28 +77,166 @@ V_ENGANCHE = {"A": 6500, "B": 500, "C": 1000, "D": 3250}
 # Cada objeto ocupa dos slots contiguos sobre el arco (no uno detrás del otro),
 # así ninguna posición tapa el acceso a la otra.
 RADIO_ESTANTE      = 400   # mm del eje a la carga, igual para todos los slots
-ANGULO_PRIMER_SLOT = 40    # grados del primer slot del estante
-PASO_ANGULAR       = 15    # grados entre slots contiguos
+ANGULO_PRIMER_SLOT = 40    # grados del primer slot de la caja (referencia)
+PASO_ANGULAR       = 15    # grados entre los DOS slots de un mismo objeto
+PASO_CUADRANTE     = 90    # grados entre objetos: uno por cuadrante
 
+# Un objeto por cuadrante, cada uno con sus dos slots contiguos. El par de la
+# caja es la referencia y los otros tres son ese mismo par rotado 90°, 180° y
+# 270°, así la planta queda simétrica alrededor del eje de giro.
+#
 # Nombres SIN tilde: son las mismas claves que usa el dict 'ocupacion' de
 # SEpower, que normaliza todo lo que le entra por voz o por cámara.
-ORDEN_SLOTS = [
-    "caja_0",      "caja_1",
-    "bidon uno_0", "bidon uno_1",
-    "bidon dos_0", "bidon dos_1",
-    "carrete_0",   "carrete_1",
-]
+ORDEN_OBJETOS = ["caja", "bidon uno", "bidon dos", "carrete"]
+
+ORDEN_SLOTS = [f"{obj}_{s}" for obj in ORDEN_OBJETOS for s in (0, 1)]
 
 # (ángulo, radio) de la posición FINAL de la carga. Para mover un slot suelto,
 # pisalo después de esta línea: puntos["caja_0"] = (37, 380)
 puntos = {
-    nombre: (ANGULO_PRIMER_SLOT + i * PASO_ANGULAR, RADIO_ESTANTE)
-    for i, nombre in enumerate(ORDEN_SLOTS)
+    f"{obj}_{s}": (ANGULO_PRIMER_SLOT + c * PASO_CUADRANTE + s * PASO_ANGULAR,
+                   RADIO_ESTANTE)
+    for c, obj in enumerate(ORDEN_OBJETOS)
+    for s in (0, 1)
 }
 
 # Puntos fijos de la planta (reales, no tocar). Ya eran radiales.
 puntos["descarga"] = (180, 500)
-puntos["carga"]    = (0, 520)
+puntos["carga"]    = (0, 515)
+
+
+# ---------------------------------------------------------------------------
+# ALTURAS DE TRABAJO, PUNTO POR PUNTO
+# ---------------------------------------------------------------------------
+# La superficie no está pareja, así que cada punto lleva sus propias alturas en
+# lugar de compartir una global. Son valores ABSOLUTOS del eje C (0 = arriba,
+# negativo = abajo): lo que se pone acá es literalmente lo que se le manda al
+# ESP32, no un offset de nada.
+#
+# Cuatro números independientes por punto:
+#
+#   toma_aprox    la pala entra al pallet a esta altura
+#   toma_final    completa el enganche y levanta desde acá
+#   dejar_aprox   baja y apoya la carga a esta altura
+#   dejar_final   termina de retirar la pala a esta altura
+#
+# El par de TOMA manda cuando el punto es origen (ir a buscar) y el de DEJAR
+# cuando es destino. Cada slot del estante usa los dos: es origen por voz y
+# destino por cámara, y no tienen por qué coincidir.
+#
+# Si las dos alturas de una maniobra son IGUALES, ese tramo se hace de una sola
+# tirada: no se emite el escalón intermedio ni las tramas de más. Así está
+# configurada la descarga.
+#
+# ALTURA_GIRO tiene que quedar por encima de todas estas.
+
+AlturasPunto = namedtuple("AlturasPunto",
+                          "toma_aprox toma_final dejar_aprox dejar_final")
+
+CUALES = AlturasPunto._fields   # ("toma_aprox", "toma_final", ...)
+
+# Estos son los valores de ARRANQUE. Los reales viven en 'alturas.json', que
+# escribe el panel de Calibración del HMI. Si el archivo no está (por ejemplo en
+# la copia que tiene la PC para dibujar el mímico), se usan estos.
+ALTURAS_POR_DEFECTO = {
+    #                          toma_aprox  toma_final  dejar_aprox  dejar_final
+    "caja_0":     AlturasPunto(    -980,      -1020,      -1000,       -970    ),
+    "caja_1":     AlturasPunto(    -980,      -1020,      -1000,       -970    ),
+    "bidon uno_0":AlturasPunto(    -980,      -1020,      -1000,       -970    ),
+    "bidon uno_1":AlturasPunto(    -980,      -1020,      -1000,       -970    ),
+    "bidon dos_0":AlturasPunto(    -980,      -1020,      -1000,       -970    ),
+    "bidon dos_1":AlturasPunto(    -980,      -1020,      -1000,       -970    ),
+    "carrete_0":  AlturasPunto(    -980,      -1020,      -1000,       -970    ),
+    "carrete_1":  AlturasPunto(    -980,      -1020,      -1000,       -970    ),
+
+    # Puntos fijos de la planta. 'carga' solo se usa como origen y 'descarga'
+    # solo como destino; las columnas que no aplican quedan igualadas.
+    "carga":      AlturasPunto(    -980,      -1020,       -980,       -980    ),
+    "descarga":   AlturasPunto(    -915,       -915,       -915,       -915    ),
+}
+
+ARCHIVO_ALTURAS = Path(__file__).resolve().parent / "alturas.json"
+
+ALTURAS = dict(ALTURAS_POR_DEFECTO)
+
+
+def cargar_alturas():
+    """Relee 'alturas.json' sobre los valores por defecto.
+
+    Se llama al empezar cada secuencia, así una recalibración desde el HMI toma
+    efecto sin reiniciar SEpower ni mandar ningún comando de recarga."""
+    global ALTURAS
+    tabla = dict(ALTURAS_POR_DEFECTO)
+
+    try:
+        crudo = json.loads(ARCHIVO_ALTURAS.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        crudo = {}
+    except Exception as e:
+        print(f"[ALTURAS] No se pudo leer {ARCHIVO_ALTURAS.name}: {e}. "
+              "Se usan los valores por defecto.", flush=True)
+        crudo = {}
+
+    for nombre, valores in crudo.items():
+        try:
+            tabla[nombre] = AlturasPunto(**{c: int(valores[c]) for c in CUALES})
+        except (TypeError, KeyError, ValueError):
+            print(f"[ALTURAS] Fila inválida para '{nombre}', se ignora.", flush=True)
+
+    faltan = [n for n in puntos if n not in tabla]
+    if faltan:
+        raise ValueError("Puntos sin alturas definidas: " + ", ".join(sorted(faltan)))
+
+    bajas = {n: min(a) for n, a in tabla.items() if min(a) < ALTURA_MINIMA}
+    if bajas:
+        raise ValueError(
+            f"Alturas por debajo de ALTURA_MINIMA ({ALTURA_MINIMA}): "
+            + ", ".join(f"{n}={v}" for n, v in sorted(bajas.items()))
+        )
+
+    ALTURAS = tabla
+    return tabla
+
+
+def guardar_alturas(tabla=None):
+    """Escribe la tabla completa en 'alturas.json'."""
+    tabla = tabla or ALTURAS
+    datos = {n: dict(zip(CUALES, a)) for n, a in tabla.items()}
+    ARCHIVO_ALTURAS.write_text(json.dumps(datos, indent=2, ensure_ascii=False),
+                               encoding="utf-8")
+    return ARCHIVO_ALTURAS
+
+
+def fijar_altura(nombre, cual, valor):
+    """Cambia una sola celda y persiste. Valida contra el tope inferior."""
+    if cual not in CUALES:
+        raise ValueError(f"'{cual}' no es una altura válida. Opciones: {', '.join(CUALES)}")
+    if nombre not in ALTURAS:
+        raise ValueError(f"El punto '{nombre}' no existe.")
+    valor = int(valor)
+    if valor < ALTURA_MINIMA:
+        raise ValueError(f"{valor} está por debajo de ALTURA_MINIMA ({ALTURA_MINIMA}).")
+
+    ALTURAS[nombre] = ALTURAS[nombre]._replace(**{cual: valor})
+    guardar_alturas()
+    return ALTURAS[nombre]
+
+
+try:
+    cargar_alturas()
+except Exception as _e:      # que un JSON roto no impida arrancar SEpower
+    print(f"[ALTURAS] {_e} Se usan los valores por defecto.", flush=True)
+    ALTURAS = dict(ALTURAS_POR_DEFECTO)
+
+
+def alturas_de(nombre):
+    """Alturas de trabajo de un punto, con un error claro si falta la fila."""
+    if nombre not in ALTURAS:
+        raise ValueError(
+            f"El punto '{nombre}' no tiene alturas definidas. "
+            "Agregale una fila a la tabla ALTURAS de cinematica.py."
+        )
+    return ALTURAS[nombre]
 
 
 def polar_desde_xy(x, y):
@@ -248,52 +371,49 @@ def construir_tramas(secuencia):
     return tramas
 
 
-def _ciclo_pick_and_place(origen, destino, altura_toma, altura_toma2,
-                          altura_dejada, alturas_retiro=None):
-    """Construye el ciclo completo con almacenamiento radial. 'origen' y
-    'destino' son (ángulo, radio) de la posición FINAL de la carga.
+def _ciclo_pick_and_place(origen, destino, alt_origen, alt_destino):
+    """Construye el ciclo completo con almacenamiento radial.
+
+    'origen' y 'destino' son (ángulo, radio) de la posición FINAL de la carga.
+    'alt_origen' y 'alt_destino' son las AlturasPunto de cada uno: del origen se
+    usan las de TOMA y del destino las de DEJAR, así cada punto lleva su propia
+    calibración de altura sin arrastrar a los demás.
 
     TOMAR en origen: posicionarse a DIST_ENGANCHE mm por dentro del pallet sobre
-    el mismo radio y a 'altura_toma', entrar la primera parte del recorrido
-    (SOLO B), bajar a 'altura_toma2' (SOLO C), completar el avance hasta el
-    pallet (SOLO B), despegar hasta ALTURA_GIRO (SOLO C), girar la pala a la
-    pose de traslado (SOLO D) y terminar de subir (SOLO C).
+    el mismo radio y a 'toma_aprox', entrar (SOLO B), despegar hasta ALTURA_GIRO
+    (SOLO C), girar la pala a la pose de traslado (SOLO D) y terminar de subir.
     DEJAR en destino: trasladarse bajando hasta ALTURA_GIRO con la pala girada,
-    devolverla al eje radial (SOLO D), terminar de bajar hasta 'altura_dejada'
-    apoyando la carga (SOLO C), retirar la pala y subir vacía (SOLO C).
+    devolverla al eje radial (SOLO D), bajar a 'dejar_aprox' apoyando la carga
+    (SOLO C), retirar la pala (SOLO B) y subir vacía (SOLO C).
 
-    El retiro tiene dos formas según 'alturas_retiro':
-      None            -> una sola tirada a 'altura_dejada' (punto de descarga).
-      (h1, h2)        -> baja a h1, retrocede el primer tramo, pasa a h2 y
-                         completa el retiro; espejo del avance de la toma.
-                         Es lo que se usa para guardar en el estante.
-
-    Termina recogiendo el eje B a cero para no hacer palanca.
-
-    Devuelve (secuencia, fases): dos listas paralelas, una con los pasos y otra
-    con la etiqueta gruesa de cada uno para la pantalla de Operación.
+    El avance y el retiro se parten en dos tramos con un escalón de altura en el
+    medio. Si las dos alturas de esa maniobra son iguales, el escalón no aporta
+    nada y el tramo sale de una sola tirada.
 
     Los tramos de enganche/retiro no mueven A ni D por construcción: se pide dos
-    veces el mismo ángulo, así que A y D salen con el valor idéntico anterior."""
+    veces el mismo ángulo, así que A y D salen con el valor idéntico anterior.
+
+    Devuelve (secuencia, fases): dos listas paralelas, una con los pasos y otra
+    con la etiqueta gruesa de cada uno para la pantalla de Operación."""
     ang_o, rad_o = origen
     ang_d, rad_d = destino
 
     rad_o_aprox = _radio_aproximacion(rad_o, "origen")
     rad_d_aprox = _radio_aproximacion(rad_d, "destino")
 
-    alturas_bajas = [altura_toma, altura_toma2, altura_dejada]
-    if alturas_retiro is not None:
-        alturas_bajas.extend(alturas_retiro)
-
-    if ALTURA_GIRO <= max(alturas_bajas):
+    de_trabajo = [alt_origen.toma_aprox, alt_origen.toma_final,
+                  alt_destino.dejar_aprox, alt_destino.dejar_final]
+    if ALTURA_GIRO <= max(de_trabajo):
         raise ValueError(
             f"ALTURA_GIRO ({ALTURA_GIRO}) tiene que quedar por encima de todas "
-            f"las alturas de trabajo ({', '.join(str(h) for h in alturas_bajas)}): "
-            "si no, el giro de la pala pasa a ser una bajada."
+            f"las alturas de trabajo del ciclo "
+            f"({', '.join(str(h) for h in de_trabajo)}): si no, el giro de la "
+            "pala pasa a ser una bajada."
         )
 
-    # Punto donde se corta el avance para bajar a la segunda altura
+    # Puntos donde se corta el avance y el retiro para cambiar de altura
     rad_o_medio = rad_o_aprox + (rad_o - rad_o_aprox) * FRAC_TRAMO1
+    rad_d_medio = rad_d - (rad_d - rad_d_aprox) * FRAC_TRAMO1
 
     secuencia = []
     fases = []
@@ -305,44 +425,47 @@ def _ciclo_pick_and_place(origen, destino, altura_toma, altura_toma2,
 
     # --- TOMAR en el origen ---
     # Traslado: gira, extiende hasta la aproximación y baja a la altura de toma
-    agregar(_paso(ang_o, rad_o_aprox, altura_toma), FASE_APROXIMAR)
-    # Primer tramo del avance -> SOLO B
-    agregar(_paso(ang_o, rad_o_medio, altura_toma, vel=V_ENGANCHE), FASE_ENGANCHAR)
-    # Bajar a la segunda altura de toma -> SOLO C
-    agregar(_paso(ang_o, rad_o_medio, altura_toma2), FASE_ENGANCHAR)
-    # Segundo tramo: completa el avance hasta el pallet -> SOLO B
-    agregar(_paso(ang_o, rad_o, altura_toma2, vel=V_ENGANCHE), FASE_ENGANCHAR)
+    agregar(_paso(ang_o, rad_o_aprox, alt_origen.toma_aprox), FASE_APROXIMAR)
+
+    if alt_origen.toma_final != alt_origen.toma_aprox:
+        # Primer tramo del avance -> SOLO B
+        agregar(_paso(ang_o, rad_o_medio, alt_origen.toma_aprox, vel=V_ENGANCHE),
+                FASE_ENGANCHAR)
+        # Escalón de altura antes de completar la entrada -> SOLO C
+        agregar(_paso(ang_o, rad_o_medio, alt_origen.toma_final), FASE_ENGANCHAR)
+
+    # Completa el avance hasta el pallet -> SOLO B
+    agregar(_paso(ang_o, rad_o, alt_origen.toma_final, vel=V_ENGANCHE),
+            FASE_ENGANCHAR)
+
     # Despegar la carga hasta la altura de giro -> SOLO C
     agregar(_paso(ang_o, rad_o, ALTURA_GIRO), FASE_TRASLADAR)
     # Girar la pala a la pose de traslado -> SOLO D
-    agregar(_paso(ang_o, rad_o, ALTURA_GIRO, giro_pala=ANGULO_TRANSPORTE), FASE_TRASLADAR)
+    agregar(_paso(ang_o, rad_o, ALTURA_GIRO, giro_pala=ANGULO_TRANSPORTE),
+            FASE_TRASLADAR)
     # Terminar de subir -> SOLO C
-    agregar(_paso(ang_o, rad_o, ALTURA_ARRIBA, giro_pala=ANGULO_TRANSPORTE), FASE_TRASLADAR)
+    agregar(_paso(ang_o, rad_o, ALTURA_ARRIBA, giro_pala=ANGULO_TRANSPORTE),
+            FASE_TRASLADAR)
 
     # --- DEJAR en el destino ---
     # Traslado con la carga hasta el destino, bajando a la altura de giro
-    agregar(_paso(ang_d, rad_d, ALTURA_GIRO, giro_pala=ANGULO_TRANSPORTE), FASE_TRASLADAR)
+    agregar(_paso(ang_d, rad_d, ALTURA_GIRO, giro_pala=ANGULO_TRANSPORTE),
+            FASE_TRASLADAR)
     # Devolver la pala al eje radial -> SOLO D
     agregar(_paso(ang_d, rad_d, ALTURA_GIRO), FASE_DEJAR)
-    # Terminar de bajar hasta apoyar la carga -> SOLO C
-    agregar(_paso(ang_d, rad_d, altura_dejada), FASE_DEJAR)
+    # Bajar hasta apoyar la carga -> SOLO C
+    agregar(_paso(ang_d, rad_d, alt_destino.dejar_aprox), FASE_DEJAR)
 
-    if alturas_retiro is None:
-        # Retiro de una sola tirada (punto de descarga)
-        agregar(_paso(ang_d, rad_d_aprox, altura_dejada, vel=V_ENGANCHE), FASE_DEJAR)
-    else:
-        # Retiro en dos tramos (estante), espejo del avance de la toma
-        h_retiro1, h_retiro2 = alturas_retiro
-        rad_d_medio = rad_d - (rad_d - rad_d_aprox) * FRAC_TRAMO1
-
-        # Liberar la pala de debajo del pallet -> SOLO C
-        agregar(_paso(ang_d, rad_d, h_retiro1), FASE_DEJAR)
+    if alt_destino.dejar_final != alt_destino.dejar_aprox:
         # Primer tramo del retiro -> SOLO B
-        agregar(_paso(ang_d, rad_d_medio, h_retiro1, vel=V_ENGANCHE), FASE_DEJAR)
-        # Segunda altura de retiro -> SOLO C
-        agregar(_paso(ang_d, rad_d_medio, h_retiro2), FASE_DEJAR)
-        # Segundo tramo: completa el retiro -> SOLO B
-        agregar(_paso(ang_d, rad_d_aprox, h_retiro2, vel=V_ENGANCHE), FASE_DEJAR)
+        agregar(_paso(ang_d, rad_d_medio, alt_destino.dejar_aprox, vel=V_ENGANCHE),
+                FASE_DEJAR)
+        # Escalón de altura antes de completar el retiro -> SOLO C
+        agregar(_paso(ang_d, rad_d_medio, alt_destino.dejar_final), FASE_DEJAR)
+
+    # Completa el retiro -> SOLO B
+    agregar(_paso(ang_d, rad_d_aprox, alt_destino.dejar_final, vel=V_ENGANCHE),
+            FASE_DEJAR)
 
     # Subir la pala vacía -> SOLO C
     agregar(_paso(ang_d, rad_d_aprox, ALTURA_ARRIBA), FASE_HOME)
@@ -354,6 +477,78 @@ def _ciclo_pick_and_place(origen, destino, altura_toma, altura_toma2,
             FASE_HOME)
 
     return secuencia, fases
+
+
+
+# ---------------------------------------------------------------------------
+# CALIBRACIÓN
+# ---------------------------------------------------------------------------
+# Poses para el panel de Calibración del HMI. Las genera la Raspberry y NO la
+# PC, aunque la PC también tenga este módulo: 'angulo_actual' y 'radio_actual'
+# son estado de la máquina, y el que vale es el de SEpower. Si la PC armara las
+# tramas con su propio estado, el desenrollado de A podría salir 360° corrido.
+
+def _vel_tupla(vel=None):
+    vel = vel or V_DEFECTO
+    return (vel["A"], vel["B"], vel["C"], vel["D"])
+
+
+def radio_de_calibracion(nombre, cual):
+    """Radio en el que se calibra cada altura: el que le da su significado.
+
+    Importa que sea exactamente el mismo que usa el ciclo real, porque el
+    cabeceo de la pala depende de la POSICIÓN de B: calibrar a otro radio daría
+    un número que después no sirve.
+    """
+    ang, rad = puntos[nombre]
+    if cual in ("toma_aprox", "dejar_final"):
+        return _radio_aproximacion(rad, cual)   # afuera del pallet
+    return rad                                  # dentro del pallet
+
+
+def pose_calibracion(nombre, cual, altura=None):
+    """Tramas para llevar la pala a la pose de una altura concreta.
+
+    Sube primero, después gira y extiende, y recién ahí baja: mandar A, B y C
+    juntos desde donde esté podría barrer el estante a media altura.
+    La pala va alineada con la pluma (D=0), igual que en el ciclo real."""
+    if nombre not in puntos:
+        raise ValueError(f"El punto '{nombre}' no existe.")
+    if cual not in CUALES:
+        raise ValueError(f"'{cual}' no es una altura válida.")
+
+    ang, _ = puntos[nombre]
+    rad = radio_de_calibracion(nombre, cual)
+    altura = getattr(alturas_de(nombre), cual) if altura is None else int(altura)
+
+    if altura < ALTURA_MINIMA:
+        raise ValueError(f"{altura} está por debajo de ALTURA_MINIMA ({ALTURA_MINIMA}).")
+
+    secuencia = [
+        # 1. Subir donde esté, sin mover nada más
+        ((angulo_actual, calcular_radio_grados(radio_actual), ALTURA_ARRIBA,
+          angulo_garra_actual), _vel_tupla()),
+        # 2. Girar y extender, arriba
+        _paso(ang, rad, ALTURA_ARRIBA),
+        # 3. Bajar a la altura a calibrar
+        _paso(ang, rad, altura),
+    ]
+    return construir_tramas(secuencia), altura
+
+
+def paso_jog(altura):
+    """Una sola trama que mueve SOLO C, desde donde esté la pala."""
+    altura = int(altura)
+    if altura < ALTURA_MINIMA:
+        raise ValueError(
+            f"{altura} está por debajo del tope ALTURA_MINIMA ({ALTURA_MINIMA})."
+        )
+    if altura > ALTURA_ARRIBA:
+        raise ValueError(f"{altura} está por encima del tope superior ({ALTURA_ARRIBA}).")
+
+    paso = ((angulo_actual, calcular_radio_grados(radio_actual), altura,
+             angulo_garra_actual), _vel_tupla())
+    return construir_tramas([paso]), altura
 
 
 def secuencia_home():
@@ -377,38 +572,36 @@ def secuencia_home():
 
 
 def obtener_sec_voz(nombre, idx):
-    """Modo voz: TOMA del estante y DEJA en descarga."""
+    """Modo voz: TOMA del estante y DEJA en el punto de descarga.
+
+    El slot del estante aporta sus alturas de TOMA y la descarga las de DEJAR."""
     punto_nombre = f"{nombre}_{idx}"
     if punto_nombre not in puntos:
         raise ValueError(f"El punto '{punto_nombre}' no está definido.")
 
-    origen = puntos[punto_nombre]
-    destino = puntos["descarga"]
+    cargar_alturas()   # toma la última calibración sin reiniciar SEpower
 
     secuencia, fases = _ciclo_pick_and_place(
-        origen, destino,
-        altura_toma=ALTURA_TOMA,
-        altura_toma2=ALTURA_TOMA2,
-        altura_dejada=ALTURA_DEJADA,
+        puntos[punto_nombre], puntos["descarga"],
+        alt_origen=alturas_de(punto_nombre),
+        alt_destino=alturas_de("descarga"),
     )
     return construir_tramas(secuencia), fases
 
 
 def obtener_entrada_cam(nombre, idx):
-    """Modo cam: TOMA de carga y DEJA en el estante."""
+    """Modo cam: TOMA de carga y DEJA en el estante.
+
+    La carga aporta sus alturas de TOMA y el slot del estante las de DEJAR."""
     punto_nombre = f"{nombre}_{idx}"
     if punto_nombre not in puntos:
         raise ValueError(f"El punto '{punto_nombre}' no está definido.")
 
-    origen = puntos["carga"]
-    destino = puntos[punto_nombre]
+    cargar_alturas()   # toma la última calibración sin reiniciar SEpower
 
-    # Guardar en el estante usa sus propias alturas y retiro en dos tramos.
     secuencia, fases = _ciclo_pick_and_place(
-        origen, destino,
-        altura_toma=ALTURA_TOMA,
-        altura_toma2=ALTURA_TOMA2,
-        altura_dejada=ALTURA_GUARDADO,
-        alturas_retiro=(ALTURA_RETIRO1, ALTURA_RETIRO2),
+        puntos["carga"], puntos[punto_nombre],
+        alt_origen=alturas_de("carga"),
+        alt_destino=alturas_de(punto_nombre),
     )
     return construir_tramas(secuencia), fases

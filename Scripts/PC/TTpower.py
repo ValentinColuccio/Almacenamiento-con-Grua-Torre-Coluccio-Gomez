@@ -11,6 +11,8 @@ import sys
 import signal
 from pathlib import Path
 
+import config_red
+
 BASE_DIR = Path(__file__).resolve().parent
 MODELO_VOSK = BASE_DIR / "vosk-model-small-es-0.42"
 
@@ -18,12 +20,12 @@ MODELO_VOSK = BASE_DIR / "vosk-model-small-es-0.42"
 
 GUI_MODE = os.environ.get("TT_GUI", "0") == "1"
 
-IP_RPI = "10.13.16.9"
-
-HOST = IP_RPI
+# Las IPs no se escriben acá: las resuelve config_red (entorno -> archivo ->
+# nombre mDNS). El HMI le pasa TT_IP_RPI por entorno al lanzar este proceso.
+HOST = config_red.ip_rpi()
 PORT = 65432
 samplerate = 16000
-IP_CAMARA = '192.168.3.11'
+IP_CAMARA = config_red.ip_camara()
 PORT_CAMARA = 2006
 
 SHUTDOWN = "__SHUTDOWN__"   # sentinela interno: pedido de apagado total
@@ -163,14 +165,23 @@ def deteccion_por_camara(colacam, cola_trigger, parar):
                     "carrete", "vacio"
                 ]
 
-                objeto_detectado = None
+                # En minúsculas antes de comparar: la búsqueda es por substring
+                # y si la cámara capitaliza algo ("Caja", "Vacio") no matchea
+                # NINGUNO de los objetos. Es la misma clase de bug que las
+                # tildes de "bidón" del lado de la Raspberry.
+                texto = data.lower()
 
+                objeto_detectado = None
                 for obj in OBJETOS_VALIDOS:
-                    if obj in data:
+                    if obj in texto:
                         objeto_detectado = obj
                         break
-                if objeto_detectado == "Vacio":
-                    print("[CAM] Detectado: Vacio", flush=True)
+
+                if objeto_detectado == "vacio":
+                    # La cámara miró y no había nada. No se encola ninguna
+                    # secuencia; solo se avisa para que el LCD lo muestre.
+                    print("[CAM] Detectado: vacío (sin objeto)", flush=True)
+                    colacam.put("VACIO")
 
                 elif objeto_detectado:
                     # Convertir a formato con espacio (como usa tu sistema)
@@ -180,7 +191,8 @@ def deteccion_por_camara(colacam, cola_trigger, parar):
 
                     colacam.put(f"cam {objeto_formateado}")
                 else:
-                    print("[CAM] Sin detección", flush=True)
+                    print(f"[CAM] Sin detección (la cámara respondió {data!r})",
+                          flush=True)
 
             except (socket.timeout, ConnectionResetError, BrokenPipeError, OSError):
                 if parar.is_set():

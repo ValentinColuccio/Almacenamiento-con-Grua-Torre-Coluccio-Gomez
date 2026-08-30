@@ -3,7 +3,8 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QTabWidget, QLabel, QTextEdit,
     QVBoxLayout, QHBoxLayout, QStatusBar,
-    QPushButton, QLineEdit, QSizePolicy, QComboBox, QFrame, QProgressBar
+    QPushButton, QLineEdit, QSizePolicy, QComboBox, QFrame, QProgressBar,
+    QDialog, QStackedWidget, QButtonGroup
 )
 from PyQt5.QtCore import QThread, pyqtSignal, Qt, QUrl, QTimer
 from PyQt5.QtGui import QImage, QPixmap
@@ -23,6 +24,7 @@ import socket
 import struct
 import numpy as np
 import html as _html
+import json
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -39,7 +41,11 @@ except Exception:
 
 ANSI_ESCAPE = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
 
-IP_RPI = "10.13.16.9"
+# Sin IP hardcodeada: la resuelve config_red y se puede cambiar desde el
+# botón "Configurar red" de la pestaña Estación de Campo.
+import config_red
+from calibracion import CalibracionTab
+import estilo
 
 # ---------------------------
 # CONTROL DE EMERGENCIA (compartido entre pestañas)
@@ -53,83 +59,41 @@ class ControlEmergencia(QWidget):
 
     log_signal = pyqtSignal(str)
 
-    ESTILO_PARADA = """
-        QPushButton {
-            background-color: #b71c1c;
-            color: white;
-            font-size: 16pt;
-            font-weight: bold;
-            border: 3px solid #ff5252;
-            border-radius: 10px;
-        }
-        QPushButton:hover  { background-color: #e53935; }
-        QPushButton:pressed { background-color: #7f0000; }
-    """
-
-    ESTILO_DESENCLAVAR = """
-        QPushButton {
-            background-color: #f9a825;
-            color: #1e1e1e;
-            font-size: 16pt;
-            font-weight: bold;
-            border: 3px solid #ffd54f;
-            border-radius: 10px;
-        }
-        QPushButton:hover  { background-color: #fdd835; }
-        QPushButton:pressed { background-color: #f57f17; }
-    """
-
-    ESTILO_CONTINUAR = """
-        QPushButton {
-            background-color: #2e7d32;
-            color: white;
-            font-size: 14pt;
-            font-weight: bold;
-            border: 3px solid #66bb6a;
-            border-radius: 10px;
-        }
-        QPushButton:hover  { background-color: #43a047; }
-        QPushButton:pressed { background-color: #1b5e20; }
-        QPushButton:disabled {
-            background-color: #2b2b2b;
-            color: #666;
-            border: 3px solid #3a3a3a;
-        }
-    """
-
-    def __init__(self, ssh_worker, alto=90):
+    def __init__(self, ssh_worker, alto=None):
         super().__init__()
         self.ssh = ssh_worker
         self.sepower_activo = False
         # "normal" -> "enclavada" -> "desenclavada" -> "normal"
         self.estado = "normal"
 
-        self.btn_parada = QPushButton("PARADA DE EMERGENCIA")
-        self.btn_parada.setFixedHeight(alto)
+        # La parada vive en su propia banda: nada más en la app mide 168 px de
+        # alto, así que su silueta se reconoce con visión periférica.
+        self.btn_parada = QPushButton("PARADA DE\nEMERGENCIA")
+        self.btn_parada.setObjectName("estopBtn")
+        self.btn_parada.setMinimumWidth(estilo.ANCHO_ESTOP)
         self.btn_parada.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.btn_parada.setStyleSheet(self.ESTILO_PARADA)
         self.btn_parada.clicked.connect(self.toggle)
 
         # Segundo acto: solo se habilita con la parada ya desenclavada
         self.btn_continuar = QPushButton("CONTINUAR")
-        self.btn_continuar.setFixedHeight(alto)
+        self.btn_continuar.setObjectName("primario")
+        self.btn_continuar.setFixedHeight(estilo.ALTO_PRIMARIO)
         self.btn_continuar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.btn_continuar.setStyleSheet(self.ESTILO_CONTINUAR)
         self.btn_continuar.setEnabled(False)
         self.btn_continuar.clicked.connect(self.continuar)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
-        layout.addWidget(self.btn_parada, 2)
+        layout.setSpacing(estilo.SEPARACION)
         layout.addWidget(self.btn_continuar, 1)
+        layout.addWidget(self.btn_parada, 2)   # a la derecha, lejos del riel
 
     def _hay_camino(self):
         if not self.ssh.channel:
-            self.log_signal.emit("[GUI] No hay conexión SSH: no se puede accionar la parada.")
+            self.log_signal.emit("[GUI] No hay conexión SSH: no se puede accionar la parada.") #type:ignore
             return False
         if not self.sepower_activo:
-            self.log_signal.emit("[GUI] El Control de Campo no está en marcha: no hay nada que frenar.")
+            self.log_signal.emit("[GUI] El Control de Campo no está en marcha: no hay nada que frenar.") #type:ignore
             return False
         return True
 
@@ -140,19 +104,19 @@ class ControlEmergencia(QWidget):
         if self.estado == "enclavada":
             # Soltar el hongo NO arranca la máquina: solo libera el enclavamiento
             self.ssh.send_command("desenclavar")
-            self.log_signal.emit("[GUI] Parada desenclavada. Falta dar CONTINUAR.")
+            self.log_signal.emit("[GUI] Parada desenclavada. Falta dar CONTINUAR.") #type:ignore
         else:
             self.ssh.send_command("emergencia")
-            self.log_signal.emit("[GUI] PARADA DE EMERGENCIA accionada.")
+            self.log_signal.emit("[GUI] PARADA DE EMERGENCIA accionada.") #type:ignore
 
     def continuar(self):
         if not self._hay_camino():
             return
         if self.estado != "desenclavada":
-            self.log_signal.emit("[GUI] Primero hay que desenclavar la parada.")
+            self.log_signal.emit("[GUI] Primero hay que desenclavar la parada.") #type:ignore
             return
         self.ssh.send_command("continuar")
-        self.log_signal.emit("[GUI] Continuando la secuencia...")
+        self.log_signal.emit("[GUI] Continuando la secuencia...") #type:ignore
 
     def set_estado(self, estado):
         """Refleja el estado real que reporta la Raspberry, sin reenviar nada."""
@@ -162,11 +126,11 @@ class ControlEmergencia(QWidget):
 
         if estado == "enclavada":
             self.btn_parada.setText("DESENCLAVAR")
-            self.btn_parada.setStyleSheet(self.ESTILO_DESENCLAVAR)
+            self.btn_parada.setStyleSheet(estilo.QSS_DESENCLAVAR)
             self.btn_continuar.setEnabled(False)
         else:
-            self.btn_parada.setText("PARADA DE EMERGENCIA")
-            self.btn_parada.setStyleSheet(self.ESTILO_PARADA)
+            self.btn_parada.setText("PARADA DE\nEMERGENCIA")
+            self.btn_parada.setStyleSheet("")     # vuelve a la hoja global
             self.btn_continuar.setEnabled(estado == "desenclavada")
 
     def set_sepower_activo(self, activo):
@@ -184,41 +148,14 @@ class GlobalTab(QWidget):
         super().__init__()
         self.ssh = ssh_worker
 
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #1e1e1e;
-            }
-
-            QTextEdit {
-                border: 2px solid #3a3a3a;
-                border-radius: 6px;
-            }
-        """)
-
         main_layout = QHBoxLayout(self)
         
         # Cámara
         self.camera_widget = CameraWidget()
-        
-        self.camera_widget.setStyleSheet("""
-            QLabel {
-                background-color: #000000;
-                border: 3px solid #444;
-                border-radius: 8px;
-                color: #888;
-                font-size: 14px;
-            }
-        """)
 
         # Consola
         self.console = QTextEdit()
         self.console.setReadOnly(True)
-        self.console.setStyleSheet(
-            "background-color: black;"
-            "color: #00FF00;"
-            "font-family: Consolas;"  
-            "font-size: 15pt;"   
-        )
 
         # Parada de emergencia
         self.emergencia = ControlEmergencia(self.ssh, alto=90)
@@ -243,13 +180,13 @@ class GlobalTab(QWidget):
 
         # El origen se detecta una sola vez, para todo el bloque recibido
         if clean.startswith("[RPi]"):
-            color, prefix = "#4aa3ff", "[RPi]"
+            color, prefix = estilo.ACENTO, "[RPi]"
         elif clean.startswith("[PC]"):
-            color, prefix = "#55ff55", "[PC]"
+            color, prefix = estilo.OK_TEXTO, "[PC]"
         elif clean.startswith("[GUI]"):
             color, prefix = "#FFFFFF", "[GUI]"
         else:
-            color, prefix = "#dddddd", ""
+            color, prefix = estilo.TEXTO, ""
 
         # Se quita el prefijo de la primera línea; después se re-agrega a cada una
         cuerpo = clean[len(prefix):] if prefix else clean
@@ -280,25 +217,23 @@ class CameraWidget(QWebEngineView):
         self.setMaximumSize(ancho, alto)
 
         # URL de la cámara
-        self.setUrl(QUrl("http://192.168.3.11/monitor/image/live-any/overlay-single-custom/-1/errorhighlight"))
+        # La IP sale de config_red, igual que la del socket de la cámara
+        self.setUrl(QUrl(f"http://{config_red.ip_camara()}/monitor/image/live-any/overlay-single-custom/-1/errorhighlight"))
 
 
 # ---------------------------
 # TAB OPERACIÓN
 # ---------------------------
 class PasoWidget(QFrame):
-    """Una fila de la lista de pasos, con su indicador de estado."""
+    """Una fila de la lista de pasos.
 
-    # estado -> (fondo, borde, color de texto, color del punto)
-    COLORES = {
-        "pendiente": ("#242424", "#3a3a3a", "#787878", "#3a3a3a"),
-        "activo":    ("#0d2f4a", "#42a5f5", "#ffffff", "#42a5f5"),
-        "hecho":     ("#12331a", "#4caf50", "#a5d6a7", "#4caf50"),
-    }
+    No trae colores propios: se marca con la propiedad dinámica "estado" y los
+    valores salen de la hoja global. Los estados del diseño son pendiente
+    (gris), activo (azul) y ok (verde)."""
 
     def __init__(self, numero, texto):
         super().__init__()
-        self.setFixedHeight(70)
+        self.setFixedHeight(estilo.ALTO_PASO)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 0, 16, 0)
@@ -308,7 +243,9 @@ class PasoWidget(QFrame):
         self.punto.setFixedSize(26, 26)
         self.punto.setAlignment(Qt.AlignCenter)  # type: ignore
 
-        self.texto = QLabel(f"{numero}.  {texto}")
+        self.texto = QLabel("%d.  %s" % (numero, texto))
+        self.texto.setStyleSheet("font-size: %dpx; font-weight: 600; border: none;"
+                                 % estilo.F_CUERPO)
 
         layout.addWidget(self.punto)
         layout.addWidget(self.texto, 1)
@@ -316,46 +253,42 @@ class PasoWidget(QFrame):
         self.set_estado("pendiente")
 
     def set_estado(self, estado):
-        fondo, borde, col_texto, col_punto = self.COLORES[estado]
-        self.setStyleSheet(
-            f"QFrame {{ background-color: {fondo};"
-            f" border: 2px solid {borde}; border-radius: 8px; }}"
-        )
-        self.texto.setStyleSheet(
-            f"font-size: 15pt; font-weight: bold; color: {col_texto}; border: none;"
-        )
+        estilo.marcar(self, estado)
+        estilo.marcar(self.texto, estado)
+        colores = {"pendiente": estilo.BORDE, "activo": estilo.ACENTO,
+                   "ok": estilo.OK, "alarma": estilo.PELIGRO_TEXTO}
         self.punto.setStyleSheet(
-            f"background-color: {col_punto}; border-radius: 13px;"
-            " border: none; color: #12331a; font-size: 13pt; font-weight: bold;"
-        )
-        self.punto.setText("✓" if estado == "hecho" else "")
+            "background-color: %s; border-radius: 13px; border: none;"
+            " color: %s; font-size: 15px; font-weight: 700;"
+            % (colores.get(estado, estilo.BORDE), estilo.BG_PANEL))
+        self.punto.setText("✓" if estado == "ok" else "")
 
 
 class Lampara(QWidget):
-    """Indicador redondo con etiqueta, para el estado de los subsistemas."""
+    """Indicador con etiqueta, para el estado de los subsistemas.
 
-    COLORES = {"ok": "#4caf50", "mal": "#f44336", "aviso": "#f9a825", "off": "#4a4a4a"}
+    El diseño pide cuadros con borde de color y no círculos sueltos: el borde
+    hace de halo sin necesidad de sombra y el texto queda siempre legible."""
 
     def __init__(self, texto):
         super().__init__()
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(9)
+        lay.setSpacing(10)
 
-        self.punto = QLabel()
-        self.punto.setFixedSize(18, 18)
+        self.punto = QFrame()
+        self.punto.setFixedSize(20, 20)
         self.lbl = QLabel(texto)
-        self.lbl.setStyleSheet("font-size: 11pt; color: #cccccc; border: none;")
+        self.lbl.setObjectName("etiqueta")
 
         lay.addWidget(self.punto)
         lay.addWidget(self.lbl, 1)
         self.set_estado("off")
 
     def set_estado(self, estado):
-        color = self.COLORES.get(estado, self.COLORES["off"])
-        self.punto.setStyleSheet(
-            f"background-color: {color}; border-radius: 9px; border: none;"
-        )
+        # "ok" / "mal" / "aviso" / "off" -> vocabulario de la hoja global
+        equivale = {"ok": "ok", "mal": "alarma", "aviso": "warn", "off": "off"}
+        estilo.marcar(self.punto, equivale.get(estado, "off"))
 
 
 class MimicoEstante(QWidget):
@@ -399,27 +332,42 @@ class MimicoEstante(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
 
-        margen = 26
+        margen = 30
         w, h = self.width(), self.height()
-        cx, cy = w / 2, h - margen                   # pivote abajo al centro
-        radios = [r for _, (_, r) in slots + fijos]
-        r_max = max(radios) if radios else 1
-        escala = min((w / 2 - margen) / r_max, (h - 2 * margen) / r_max)
+
+        # El encuadre se calcula solo a partir de los puntos: sirve tanto si la
+        # planta ocupa medio plano como los cuatro cuadrantes.
+        xs, ys = [0.0], [0.0]                        # el pivote siempre entra
+        for _, (ang, rad) in slots + fijos:
+            a = math.radians(ang)
+            xs.append(rad * math.cos(a))
+            ys.append(rad * math.sin(a))
+
+        ancho_mm = max(max(xs) - min(xs), 1.0)
+        alto_mm = max(max(ys) - min(ys), 1.0)
+        escala = min((w - 2 * margen) / ancho_mm, (h - 2 * margen) / alto_mm)
+
+        # Centro del dibujo = centro del bounding box de los puntos
+        mx = (max(xs) + min(xs)) / 2
+        my = (max(ys) + min(ys)) / 2
+        cx = w / 2 - mx * escala
+        cy = h / 2 + my * escala
 
         def en_pantalla(ang, rad):
             a = math.radians(ang)
             return QPointF(cx + rad * escala * math.cos(a),
                            cy - rad * escala * math.sin(a))
 
-        # Arco de alcance
-        p.setPen(QPen(QColor("#333333"), 2, Qt.DashLine))       # type: ignore
+        # Círculo de alcance
+        radios = [r for _, (_, r) in slots + fijos]
+        rr = (max(radios) if radios else 1) * escala
+        p.setPen(QPen(QColor(estilo.BORDE), 2, Qt.DashLine))       # type: ignore
         p.setBrush(Qt.NoBrush)                                   # type: ignore
-        rr = r_max * escala
-        p.drawArc(QRectF(cx - rr, cy - rr, 2 * rr, 2 * rr), 0, 180 * 16)
+        p.drawEllipse(QPointF(cx, cy), rr, rr)
 
         # Pivote
         p.setPen(Qt.NoPen)                                       # type: ignore
-        p.setBrush(QBrush(QColor("#666666")))
+        p.setBrush(QBrush(QColor(estilo.TEXTO_2)))
         p.drawEllipse(QPointF(cx, cy), 7, 7)
 
         fuente = p.font()
@@ -430,10 +378,10 @@ class MimicoEstante(QWidget):
         # Carga y descarga
         for nombre, (ang, rad) in fijos:
             c = en_pantalla(ang, rad)
-            p.setPen(QPen(QColor("#5a5a5a"), 2))
-            p.setBrush(QBrush(QColor("#2b2b2b")))
+            p.setPen(QPen(QColor(estilo.BORDE_FUERTE), 2))
+            p.setBrush(QBrush(QColor(estilo.BG_CONTROL)))
             p.drawRoundedRect(QRectF(c.x() - 34, c.y() - 13, 68, 26), 5, 5)
-            p.setPen(QPen(QColor("#aaaaaa")))
+            p.setPen(QPen(QColor(estilo.TEXTO_2)))
             p.drawText(QRectF(c.x() - 34, c.y() - 13, 68, 26),
                        Qt.AlignCenter, nombre.upper())          # type: ignore
 
@@ -444,22 +392,27 @@ class MimicoEstante(QWidget):
             es_destino = (nombre == self.destino)
 
             if es_destino:
-                relleno, borde, grosor = QColor("#4a3a00"), QColor("#f9a825"), 4
+                relleno, borde, grosor = QColor(estilo.WARN_BG), QColor(estilo.WARN), 4
             elif ocupado:
-                relleno, borde, grosor = QColor("#0d2f4a"), QColor("#42a5f5"), 2
+                relleno, borde, grosor = QColor(estilo.ACENTO_BG), QColor(estilo.ACENTO), 2
             else:
-                relleno, borde, grosor = QColor("#232323"), QColor("#3f3f3f"), 2
+                relleno, borde, grosor = QColor(estilo.BG_CONTROL), QColor(estilo.BORDE), 2
 
             p.setPen(QPen(borde, grosor))
             p.setBrush(QBrush(relleno))
             p.drawEllipse(c, 19, 19)
 
             base = nombre.rsplit("_", 1)[0]
-            p.setPen(QPen(QColor("#ffffff") if (ocupado or es_destino) else QColor("#6f6f6f")))
+            p.setPen(QPen(QColor("#FFFFFF" if (ocupado or es_destino) else estilo.OFF)))
             p.drawText(QRectF(c.x() - 19, c.y() - 19, 38, 38),
                        Qt.AlignCenter, self.ABREV.get(base, base[:2].upper()))  # type: ignore
 
         p.end()
+
+
+# Fase que manda la Raspberry durante un movimiento del panel de Calibración.
+# No es uno de los cinco pasos del ciclo: se muestra como estado, no como paso.
+FASE_CALIBRAR = cin.FASE_CALIBRAR if cin is not None else "Calibrando"
 
 
 class OperacionTab(QWidget):
@@ -472,27 +425,26 @@ class OperacionTab(QWidget):
         "Trasladando la carga", "Dejando la carga", "Volviendo a home",
     ]
 
+    # (texto, color de trazo, tinte de fondo) — todos del sistema de diseño
     ESTADOS = {
-        "espera":       ("EN ESPERA",            "#42a5f5", "#0d2f4a"),
-        "operando":     ("EN OPERACIÓN",         "#4caf50", "#12331a"),
-        "enclavada":    ("PARADA DE EMERGENCIA", "#ff5252", "#3a0d0d"),
-        "desenclavada": ("LISTA PARA CONTINUAR", "#f9a825", "#3a2d05"),
-        "sin_campo":    ("SIN CONTROL DE CAMPO", "#787878", "#242424"),
+        "espera":       ("EN ESPERA",            estilo.ACENTO,        estilo.ACENTO_BG),
+        "operando":     ("EN OPERACIÓN",         estilo.OK_TEXTO,      estilo.OK_BG),
+        "enclavada":    ("PARADA DE EMERGENCIA", estilo.PELIGRO_TEXTO, estilo.PELIGRO_BG),
+        "desenclavada": ("LISTA PARA CONTINUAR", estilo.WARN,          estilo.WARN_BG),
+        "calibrando":   ("CALIBRANDO",           estilo.WARN,          estilo.WARN_BG),
+        "sin_campo":    ("SIN CONTROL DE CAMPO", estilo.OFF,           estilo.BG_CONTROL),
     }
-
-    CAJA = ("background-color: #242424; border: 2px solid #3a3a3a;"
-            " border-radius: 8px;")
 
     def __init__(self, ssh_worker):
         super().__init__()
         self.ssh = ssh_worker
         self.estado_emergencia = "normal"
         self.hay_ciclo = False
+        self.calibrando = False
         self.sepower_activo = False
         self.t_inicio_ciclo = None
         self.duracion_ultimo = None
 
-        self.setStyleSheet("QWidget { background-color: #1e1e1e; }")
 
         raiz = QVBoxLayout(self)
         raiz.setSpacing(12)
@@ -500,12 +452,11 @@ class OperacionTab(QWidget):
 
         # ===== Fila superior: reloj + banner =====
         self.lbl_reloj = QLabel("--:--:--")
-        self.lbl_reloj.setFixedSize(190, 78)
+        # Sin ancho fijo a propósito: lo define la métrica de la fuente, así
+        # no se recorta si mañana cambia el tamaño en el sistema de diseño.
+        self.lbl_reloj.setFixedHeight(78)
         self.lbl_reloj.setAlignment(Qt.AlignCenter)  # type: ignore
-        self.lbl_reloj.setStyleSheet(
-            "font-family: Consolas; font-size: 26pt; font-weight: bold;"
-            "color: #dddddd;" + self.CAJA
-        )
+        self.lbl_reloj.setObjectName("reloj")
 
         self.lbl_estado = QLabel()
         self.lbl_estado.setFixedHeight(78)
@@ -523,34 +474,26 @@ class OperacionTab(QWidget):
         self.lbl_operacion = QLabel("—")
         self.lbl_operacion.setFixedHeight(52)
         self.lbl_operacion.setAlignment(Qt.AlignCenter)  # type: ignore
-        self.lbl_operacion.setStyleSheet(
-            "font-size: 16pt; font-weight: bold; color: #dddddd;" + self.CAJA)
+        self.lbl_operacion.setObjectName("tituloPantalla")
 
         self.lbl_tiempo = QLabel("Ciclo 00:00   ·   anterior --:--")
         self.lbl_tiempo.setFixedHeight(40)
         self.lbl_tiempo.setAlignment(Qt.AlignCenter)  # type: ignore
-        self.lbl_tiempo.setStyleSheet(
-            "font-family: Consolas; font-size: 12pt; color: #9fd3ff;" + self.CAJA)
+        self.lbl_tiempo.setObjectName("etiqueta")
 
         self.lbl_progreso = QLabel("paso —/—")
         self.lbl_progreso.setFixedHeight(34)
         self.lbl_progreso.setAlignment(Qt.AlignCenter)  # type: ignore
-        self.lbl_progreso.setStyleSheet(
-            "font-family: Consolas; font-size: 11pt; color: #9a9a9a; border: none;")
+        self.lbl_progreso.setObjectName("etiqueta")
 
         self.barra = QProgressBar()
         self.barra.setFixedHeight(22)
         self.barra.setTextVisible(False)
         self.barra.setRange(0, 100)
         self.barra.setValue(0)
-        self.barra.setStyleSheet("""
-            QProgressBar { background-color: #242424; border: 2px solid #3a3a3a;
-                           border-radius: 6px; }
-            QProgressBar::chunk { background-color: #42a5f5; border-radius: 4px; }
-        """)
 
         self.mimico = MimicoEstante()
-        self.mimico.setStyleSheet(self.CAJA)
+        self.mimico.setObjectName("panel")
 
         # Lámparas de subsistemas
         self.lamparas = {
@@ -570,7 +513,7 @@ class OperacionTab(QWidget):
         grilla.addLayout(col_a); grilla.addLayout(col_b)
 
         caja_lamparas = QFrame()
-        caja_lamparas.setStyleSheet("QFrame {" + self.CAJA + "}")
+        caja_lamparas.setObjectName("panel")
         caja_lamparas.setFixedHeight(96)
         lay_lamp = QVBoxLayout(caja_lamparas)
         lay_lamp.setContentsMargins(14, 8, 14, 8)
@@ -602,8 +545,7 @@ class OperacionTab(QWidget):
         # ===== Último evento =====
         self.lbl_evento = QLabel("Sin eventos")
         self.lbl_evento.setFixedHeight(44)
-        self.lbl_evento.setStyleSheet(
-            "font-size: 12pt; color: #cccccc; padding-left: 14px;" + self.CAJA)
+        self.lbl_evento.setObjectName("panel")
 
         # ===== Botonera =====
         self.emergencia = ControlEmergencia(self.ssh, alto=82)
@@ -611,15 +553,6 @@ class OperacionTab(QWidget):
         self.btn_home = QPushButton("HOME")
         self.btn_home.setFixedHeight(82)
         self.btn_home.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.btn_home.setStyleSheet("""
-            QPushButton { background-color: #1976d2; color: white; font-size: 14pt;
-                          font-weight: bold; border: 3px solid #64b5f6;
-                          border-radius: 10px; }
-            QPushButton:hover  { background-color: #42a5f5; }
-            QPushButton:pressed { background-color: #0d47a1; }
-            QPushButton:disabled { background-color: #2b2b2b; color: #666;
-                                   border: 3px solid #3a3a3a; }
-        """)
         self.btn_home.setEnabled(False)
         self.btn_home.clicked.connect(self.ir_a_home)
 
@@ -652,8 +585,17 @@ class OperacionTab(QWidget):
 
     def set_fase(self, fase):
         """'---' cierra el ciclo; cualquier otra cosa marca esa fase como activa
-        y da por hechas las anteriores."""
+        y da por hechas las anteriores.
+
+        'Calibrando' no es un paso del ciclo: no toca la lista ni arranca el
+        cronómetro, solo cambia el banner a ámbar."""
+        if fase == FASE_CALIBRAR:
+            self.calibrando = True
+            self._refrescar_estado()
+            return
+
         if fase == "---":
+            self.calibrando = False
             if self.hay_ciclo and self.t_inicio_ciclo is not None:
                 self.duracion_ultimo = time.time() - self.t_inicio_ciclo
             self.hay_ciclo = False
@@ -678,7 +620,7 @@ class OperacionTab(QWidget):
         actual = self.FASES.index(fase)
         for i, p in enumerate(self.pasos):
             if i < actual:
-                p.set_estado("hecho")
+                p.set_estado("ok")
             elif i == actual:
                 p.set_estado("activo")
             else:
@@ -692,11 +634,18 @@ class OperacionTab(QWidget):
     def set_operacion(self, texto):
         self.lbl_operacion.setText(texto.upper())
 
-        # "caja -> estante 2" identifica el slot a resaltar en el mímico
-        m = re.match(r"^(.*?)\s*->\s*estante\s*(\d+)", texto.strip(), re.IGNORECASE)
-        self.mimico.set_destino(
-            f"{m.group(1).strip()}_{int(m.group(2)) - 1}" if m else None
-        )
+        # Qué slot resaltar en el mímico. Dos formatos posibles:
+        #   "caja -> estante 2"                 (ciclo normal)
+        #   "calibrando caja_0 · toma_aprox"    (panel de calibración)
+        limpio = texto.strip()
+        m = re.match(r"^(.*?)\s*->\s*estante\s*(\d+)", limpio, re.IGNORECASE)
+        if m:
+            self.mimico.set_destino("%s_%d" % (m.group(1).strip(),
+                                               int(m.group(2)) - 1))
+            return
+
+        m = re.match(r"^calibrando\s+(.+?)\s*·", limpio, re.IGNORECASE)
+        self.mimico.set_destino(m.group(1).strip() if m else None)
 
     def set_ocupacion(self, mapa):
         self.mimico.set_ocupacion(mapa)
@@ -748,6 +697,8 @@ class OperacionTab(QWidget):
             clave = self.estado_emergencia
         elif not self.sepower_activo:
             clave = "sin_campo"
+        elif self.calibrando:
+            clave = "calibrando"
         elif self.hay_ciclo:
             clave = "operando"
         else:
@@ -756,9 +707,9 @@ class OperacionTab(QWidget):
         texto, color, fondo = self.ESTADOS[clave]
         self.lbl_estado.setText(texto)
         self.lbl_estado.setStyleSheet(
-            f"font-size: 24pt; font-weight: bold; color: {color};"
-            f"background-color: {fondo}; border: 3px solid {color}; border-radius: 10px;"
-        )
+            "font-size: %dpx; font-weight: 600; color: %s;"
+            "background-color: %s; border: 3px solid %s; border-radius: 4px;"
+            % (estilo.F_TITULO, color, fondo, color))
 
 # ---------------------------
 # TABS secundarias
@@ -767,39 +718,28 @@ class TitleBar(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
         self.parent: QMainWindow = parent
-        self.setFixedHeight(38)
-
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #1f1f1f;
-            }
-            QLabel {
-                color: #dddddd;
-                font-size: 12pt;
-            }
-            QPushButton {
-                border: none;
-                color: white;
-                padding: 6px 12px;
-            }
-            QPushButton:hover {
-                background-color: #3a3a3a;
-            }
-            QPushButton#closeBtn:hover {
-                background-color: #c42b1c;
-            }
-        """)
+        self.setObjectName("tituloBarra")
+        self.setFixedHeight(estilo.ALTO_TITULO)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 0, 5, 0)
+        layout.setContentsMargins(10, 0, 0, 0)
         layout.setSpacing(0)
 
         self.title = QLabel("Sistema Grúa Torre – Panel de Control")
+        self.title.setObjectName("tituloVentana")
 
-        btn_min = QPushButton("—")
-        btn_max = QPushButton("▢")
+        # Sin objectName heredarían la regla global de QPushButton: 84 px de
+        # alto dentro de una barra de 48, y quedaban cortados y sin texto.
+        btn_min = QPushButton("–")
+        btn_max = QPushButton("□")
         btn_close = QPushButton("✕")
-        btn_close.setObjectName("closeBtn")
+        btn_min.setObjectName("tituloBtn")
+        btn_max.setObjectName("tituloBtn")
+        btn_close.setObjectName("cerrarBtn")
+
+        btn_min.setToolTip("Minimizar")
+        btn_max.setToolTip("Maximizar / restaurar")
+        btn_close.setToolTip("Cerrar el HMI")
 
         btn_min.clicked.connect(parent.showMinimized)
         btn_max.clicked.connect(self.toggle_max_restore)
@@ -829,6 +769,116 @@ class TitleBar(QWidget):
             )
             self.drag_pos = event.globalPos()
 
+# ---------------------------
+# CONFIGURACIÓN DE RED
+# ---------------------------
+class BuscadorRPi(QThread):
+    """Barre la red buscando la Raspberry. En un hilo para no congelar el HMI."""
+    resultado = pyqtSignal(list)
+
+    def run(self):
+        try:
+            self.resultado.emit(config_red.descubrir())
+        except Exception:
+            self.resultado.emit([])
+
+
+class DialogoRed(QDialog):
+    """Dónde está la Raspberry. Se carga una vez y queda guardado en disco.
+
+    El AP es un celular, así que no hay IP fija ni subred estable: por eso el
+    botón Buscar deriva la subred de la IP que tenga la PC en ese momento."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Configuración de red")
+        self.setMinimumWidth(520)
+
+        cfg = config_red.cargar()
+
+        self.campo_rpi = QLineEdit(cfg["ip_rpi"])
+        self.campo_cam = QLineEdit(cfg["ip_camara"])
+
+        self.estado = QLabel("Tu PC está en " + (config_red.ip_local() or "—"))
+        self.estado.setWordWrap(True)
+        self.estado.setObjectName("etiqueta")
+
+        btn_buscar = QPushButton("Buscar")
+        btn_probar = QPushButton("Probar")
+        btn_guardar = QPushButton("Guardar")
+        btn_cerrar = QPushButton("Cerrar")
+        for b in (btn_buscar, btn_probar, btn_guardar, btn_cerrar):
+            b.setFixedHeight(estilo.ALTO_SECUNDARIO)
+        self.btn_buscar = btn_buscar
+
+        btn_buscar.clicked.connect(self.buscar)
+        btn_probar.clicked.connect(self.probar)
+        btn_guardar.clicked.connect(self.guardar)
+        btn_cerrar.clicked.connect(self.accept)
+
+        fila_rpi = QHBoxLayout()
+        fila_rpi.addWidget(self.campo_rpi, 1)
+        fila_rpi.addWidget(btn_buscar)
+        fila_rpi.addWidget(btn_probar)
+
+        botones = QHBoxLayout()
+        botones.addStretch()
+        botones.addWidget(btn_guardar)
+        botones.addWidget(btn_cerrar)
+
+        lay = QVBoxLayout(self)
+        lay.setSpacing(10)
+        lay.setContentsMargins(18, 18, 18, 18)
+        lay.addWidget(QLabel("Raspberry Pi  (nombre o IP)"))
+        lay.addLayout(fila_rpi)
+        lay.addWidget(QLabel("Cámara inteligente"))
+        lay.addWidget(self.campo_cam)
+        lay.addWidget(self.estado)
+        lay.addLayout(botones)
+
+        self.buscador = None
+
+    def _avisar(self, texto, color=estilo.TEXTO_2):
+        self.estado.setText(texto)
+        self.estado.setStyleSheet("color: %s; font-size: %dpx;"
+                                  % (color, estilo.F_ETIQUETA))
+
+    def buscar(self):
+        self.btn_buscar.setEnabled(False)
+        self._avisar("Buscando en la red... (unos segundos)", estilo.WARN)
+        self.buscador = BuscadorRPi()
+        self.buscador.resultado.connect(self._encontrado)
+        self.buscador.start()
+
+    def _encontrado(self, hosts):
+        self.btn_buscar.setEnabled(True)
+        if not hosts:
+            self._avisar("No se encontró ninguna Raspberry. ¿Está encendida y "
+                         "conectada al mismo WiFi?", estilo.PELIGRO_TEXTO)
+            return
+        self.campo_rpi.setText(hosts[0])
+        if len(hosts) == 1:
+            self._avisar("Encontrada en " + hosts[0], estilo.OK_TEXTO)
+        else:
+            self._avisar("Varios equipos con SSH: " + ", ".join(hosts)
+                         + ". Se cargó el primero.", estilo.WARN)
+
+    def probar(self):
+        host = self.campo_rpi.text().strip()
+        if config_red.probar(host):
+            self._avisar(host + " responde en el puerto SSH.", estilo.OK_TEXTO)
+        else:
+            self._avisar(host + " no responde. Probá con Buscar.",
+                         estilo.PELIGRO_TEXTO)
+
+    def guardar(self):
+        config_red.guardar({
+            "ip_rpi": self.campo_rpi.text().strip(),
+            "ip_camara": self.campo_cam.text().strip(),
+        })
+        self._avisar("Guardado. Se usa en la próxima conexión.", estilo.OK_TEXTO)
+
+
 class RaspberryTab(QWidget):
     sepower_status_signal = pyqtSignal(str)
     def __init__(self, ssh_worker):
@@ -838,9 +888,18 @@ class RaspberryTab(QWidget):
         layout = QVBoxLayout(self)
 
         # Botones
-        self.btn_connect       = QPushButton("Conectar Estación de Campo")
-        self.btn_start_sepower = QPushButton("Iniciar Control de Campo")
-        self.btn_stop_sepower  = QPushButton("Detener Control de Campo")
+        # Etiquetas cortas: cuatro botones a 26 px con los nombres largos
+        # exigían 2538 px de ancho, más de lo que da el panel. El nombre
+        # completo queda en el tooltip.
+        self.btn_red           = QPushButton("RED")
+        self.btn_connect       = QPushButton("CONECTAR")
+        self.btn_start_sepower = QPushButton("INICIAR")
+        self.btn_stop_sepower  = QPushButton("DETENER")
+
+        self.btn_red.setToolTip("Configurar red: dónde está la Raspberry")
+        self.btn_connect.setToolTip("Conectar por SSH a la Estación de Campo")
+        self.btn_start_sepower.setToolTip("Iniciar el Control de Campo (SEpower)")
+        self.btn_stop_sepower.setToolTip("Detener el Control de Campo")
         '''self.btn_connect = QPushButton("Conectar SSH")
         self.btn_start_sepower = QPushButton("Iniciar SEpower")
         self.btn_stop_sepower = QPushButton("Detener SEpower")'''
@@ -848,67 +907,22 @@ class RaspberryTab(QWidget):
         # Consola
         self.console = QTextEdit()
         self.console.setReadOnly(True)
-        self.console.setStyleSheet(
-            "background-color: black;"
-            "color: #00FF00;"
-            "font-family: Consolas;"
-            "font-size: 15pt;"  
-        )
 
         # Selector de destino del comando
         self.sepower_activo = False
         self.destino = QComboBox()
         self.destino.addItems(["Raspberry (shell)", "ESP32 (serie)"])
         self.destino.setFixedWidth(200)
-        self.destino.setStyleSheet("""
-            QComboBox {
-                background-color: #121212;
-                color: #e0e0e0;
-                font-size: 11pt;
-                padding: 8px;
-                border: 1px solid #3a3a3a;
-                border-radius: 6px;
-            }
-            QComboBox:focus {
-                border: 1px solid #1976d2;
-            }
-            QComboBox::drop-down {
-                border: none;
-                width: 22px;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #121212;
-                color: #e0e0e0;
-                selection-background-color: #1976d2;
-                border: 1px solid #3a3a3a;
-            }
-        """)
 
         # Input
         self.input = QLineEdit()
         self.input.setPlaceholderText("Ingrese comando y presione Enter")
-        self.input.setStyleSheet("""
-            QLineEdit {
-                background-color: #121212;
-                color: #e0e0e0;
-                font-size: 11pt;
-                padding: 8px;
-                border: 1px solid #3a3a3a;
-                border-radius: 6px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #1976d2;
-            }
-            QLineEdit::placeholder {
-                color: #8a8a8a;
-                font-style: italic;
-            }
-        """)
 
         # Layout
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(12)
         btn_layout.setContentsMargins(10, 10, 10, 10)
+        btn_layout.addWidget(self.btn_red)
         btn_layout.addWidget(self.btn_connect)
         btn_layout.addWidget(self.btn_start_sepower)
         btn_layout.addWidget(self.btn_stop_sepower)
@@ -923,89 +937,16 @@ class RaspberryTab(QWidget):
         layout.addLayout(entrada_layout)
 
         for btn in (
+            self.btn_red,
             self.btn_connect,
             self.btn_start_sepower,
             self.btn_stop_sepower
         ):
-            btn.setFixedHeight(100)
-            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            
-        self.btn_connect.setStyleSheet("""
-            QPushButton {
-                background-color: #1976d2;
-                color: white;
-                font-size: 12pt;
-                font-weight: bold;
-                border-radius: 8px;
-            }
-
-            QPushButton:hover {
-                background-color: #42a5f5;
-                border: 2px solid #90caf9;
-            }
-
-            QPushButton:pressed {
-                background-color: #0d47a1;
-            }
-
-            QPushButton:disabled {
-                background-color: #37474f;
-                color: #78909c;
-                border: 2px dashed #546e7a;
-            }
-        """)  
-        
-        self.btn_start_sepower.setStyleSheet("""
-            QPushButton {
-                background-color: #2e7d32;
-                color: white;
-                font-size: 12pt;
-                font-weight: bold;
-                border-radius: 8px;
-            }
-
-            QPushButton:hover {
-                background-color: #66bb6a;
-                border: 2px solid #a5d6a7;
-            }
-
-            QPushButton:pressed {
-                background-color: #1b5e20;
-            }
-
-            QPushButton:disabled {
-                background-color: #2e4f32;
-                color: #81c784;
-                border: 2px dashed #4caf50;
-            }
-        """) 
-
-        self.btn_stop_sepower.setStyleSheet("""
-            QPushButton {
-                background-color: #c62828;
-                color: white;
-                font-size: 12pt;
-                font-weight: bold;
-                border-radius: 8px;
-            }
-
-            QPushButton:hover {
-                background-color: #ef5350;
-                border: 2px solid #ef9a9a;
-            }
-
-            QPushButton:pressed {
-                background-color: #8e0000;
-            }
-
-            QPushButton:disabled {
-                background-color: #5f2a2a;
-                color: #ef9a9a;
-                border: 2px dashed #e57373;
-            }
-        """)
+            btn.setFixedHeight(estilo.ALTO_PRIMARIO)
+            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)   
         
         # Conexiones
+        self.btn_red.clicked.connect(self.configurar_red)
         self.btn_connect.clicked.connect(self.ssh.connect_ssh)
         self.btn_start_sepower.clicked.connect(self.start_sepower)  
         self.btn_stop_sepower.clicked.connect(self.stop_sepower)
@@ -1018,6 +959,11 @@ class RaspberryTab(QWidget):
         self.btn_stop_sepower.setEnabled(False)  
         self.btn_start_sepower.setEnabled(False)
         self.btn_stop_sepower.setEnabled(False)                                  
+
+    def configurar_red(self):
+        dlg = DialogoRed(self)
+        dlg.exec_()
+        self.append_output("[GUI] Raspberry configurada en: " + config_red.ip_rpi() + "\n")
 
     def append_output(self, text):
         self.console.moveCursor(self.console.textCursor().End)
@@ -1096,8 +1042,8 @@ class ControlPCTab(QWidget):
         layout = QVBoxLayout(self)
 
         # Botones
-        self.btn_start = QPushButton("Iniciar Percepción")
-        self.btn_stop  = QPushButton("Detener Percepción")
+        self.btn_start = QPushButton("INICIAR PERCEPCIÓN")
+        self.btn_stop  = QPushButton("DETENER PERCEPCIÓN")
         '''self.btn_start = QPushButton("Iniciar TTpower")
         self.btn_stop = QPushButton("Detener TTpower")'''
 
@@ -1105,74 +1051,19 @@ class ControlPCTab(QWidget):
         btn_layout.addWidget(self.btn_start)
         btn_layout.addWidget(self.btn_stop)
         
-        self.btn_start.setFixedHeight(100)
-        self.btn_stop.setFixedHeight(100)
+        self.btn_start.setObjectName("primario")
+        self.btn_start.setFixedHeight(estilo.ALTO_PRIMARIO)
+        self.btn_stop.setFixedHeight(estilo.ALTO_PRIMARIO)
         
         self.btn_start.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.btn_stop.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         btn_layout.setSpacing(12)
         btn_layout.setContentsMargins(10, 10, 10, 10)
-        
-        self.btn_start.setStyleSheet("""
-            QPushButton {
-                background-color: #2e7d32;
-                color: white;
-                font-size: 13pt;
-                font-weight: bold;
-                border-radius: 8px;
-            }
-
-            QPushButton:hover {
-                background-color: #66bb6a;
-                border: 2px solid #a5d6a7;
-            }
-
-            QPushButton:pressed {
-                background-color: #1b5e20;
-            }
-
-            QPushButton:disabled {
-                background-color: #2e4f32;
-                color: #81c784;
-                border: 2px dashed #4caf50;
-            }
-        """)
-
-        self.btn_stop.setStyleSheet("""
-            QPushButton {
-                background-color: #c62828;
-                color: white;
-                font-size: 13pt;
-                font-weight: bold;
-                border-radius: 8px;
-            }
-
-            QPushButton:hover {
-                background-color: #ef5350;
-                border: 2px solid #ef9a9a;
-            }
-
-            QPushButton:pressed {
-                background-color: #8e0000;
-            }
-
-            QPushButton:disabled {
-                background-color: #5f2a2a;
-                color: #ef9a9a;
-                border: 2px dashed #e57373;
-            }
-        """)
 
         # Consola
         self.console = QTextEdit()
         self.console.setReadOnly(True)
-        self.console.setStyleSheet(
-            "background-color: black;"
-            "color: #00FF00;"
-            "font-family: Consolas;"
-            "font-size: 15pt;"
-        )
 
         # Layout final
         layout.addLayout(btn_layout)
@@ -1209,109 +1100,33 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: qlineargradient(
-                    x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #3a3a3a,
-                    stop:1 #1f1f1f
-                );
-            }
-        """)
-
         self.setWindowTitle("Sistema Grúa Torre - Panel de Control")
-        self.resize(1200, 700)
+        self.resize(1920, 1080)   # panel de 15,6 pulgadas a 1080p
         self.setWindowFlags(Qt.FramelessWindowHint)#type: ignore
         self.setAttribute(Qt.WA_TranslucentBackground, False)#type: ignore
 
         # ----- Tabs -----
-        self.tabs = QTabWidget()
-        
-        self.tabs.setStyleSheet("""
-        QTabWidget::pane {
-            border: 1px solid #333;
-            top: -1px;
-        }
-
-        /* Barra de tabs */
-        QTabBar::tab {
-            background: #222;
-            color: #00FF00;
-            font-family: Consolas;
-            font-size: 15pt;
-            min-height: 500px;
-            min-width: 200px;
-            padding: 10px;
-            border: 1px solid #333;
-        }
-
-        /* Tab seleccionada */
-        QTabBar::tab:selected {
-            background: #000;
-            color: #00FF00;
-            border-bottom: 3px solid #00FF00;
-        }
-
-        /* Hover */
-        QTabBar::tab:hover {
-            background: #111;
-        }
-
-        /* Quitar margen raro */
-        QTabBar::tab:!selected {
-            margin-top: 2px;
-        }
-        """)
+        # Riel de navegación en vez de QTabWidget (ver más abajo)
+        self.paginas = QStackedWidget()
 
         # El SSH se crea primero: la pestaña de supervisión lo necesita
         # para mandar la parada de emergencia.
         self.ssh_worker = SSHWorker()
 
         self.global_tab = GlobalTab(self.ssh_worker)
-        self.tabs.addTab(self.global_tab, "Supervisión")
-        #self.tabs.addTab(self.global_tab, "GLOBAL")
-        self.tabs.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid #444;
-                background: #1e1e1e;
-            }
 
-            QTabBar::tab {
-                background: #2b2b2b;
-                color: #ccc;
-                padding: 8px;
-                min-width: 400px;
-            }
-
-            QTabBar::tab:selected {
-                background: #1e1e1e;
-                color: #00c8ff;
-                font-weight: bold;
-            }
-
-            QTabBar::tab:hover {
-                background: #3a3a3a;
-            }
-            
-            QWidget#centralwidget {
-                border: 1px solid #444;
-            }
-        """)
-        
         self.ssh_worker.status_signal.connect(self.update_status)
         self.ssh_worker.output_signal.connect(lambda txt: self.global_tab.add_log("[RPi] " + txt))
         self.raspberry_tab = RaspberryTab(self.ssh_worker)
         self.raspberry_tab.sepower_status_signal.connect(self.update_status)
-        self.tabs.addTab(self.raspberry_tab, "Estación de Campo")
-        #self.tabs.addTab(self.raspberry_tab, "Raspberry / SSH")
 
         self.ttpower_worker = TTpowerWorker()
         self.ttpower_worker.log_signal.connect(self.global_tab.add_log)
         self.ttpower_worker.status_signal.connect(self.update_status)
         self.ttpower_worker.voz_signal.connect(self.update_voz)
-        self.tabs.insertTab(1, ControlPCTab(self.ttpower_worker), "Estación de Operación")
+        self.pc_tab = ControlPCTab(self.ttpower_worker)
 
-        # Pantalla de operación: siempre última
+        # Pantalla de operación: es la primera de la barra (ver más abajo)
         self.operacion_tab = OperacionTab(self.ssh_worker)
         self.ssh_worker.fase_signal.connect(self.operacion_tab.set_fase)
         self.ssh_worker.operacion_signal.connect(self.operacion_tab.set_operacion)
@@ -1320,52 +1135,85 @@ class MainWindow(QMainWindow):
         self.ssh_worker.ir_signal.connect(self.operacion_tab.set_ir)
         self.ssh_worker.evento_signal.connect(self.operacion_tab.set_evento)
         self.operacion_tab.emergencia.log_signal.connect(self.global_tab.add_log)
-        self.tabs.addTab(self.operacion_tab, "Operación")
+
+        # Calibración: en su propio archivo, mismo proceso y mismo canal SSH
+        self.calibracion_tab = CalibracionTab(self.ssh_worker)
+        self.ssh_worker.calib_c_signal.connect(self.calibracion_tab.set_c)
+        self.ssh_worker.calib_pose_signal.connect(self.calibracion_tab.set_pose)
+        self.ssh_worker.calib_tabla_signal.connect(self.calibracion_tab.set_tabla)
+        self.ssh_worker.calib_error_signal.connect(self.calibracion_tab.set_error)
+
+        # ----- Riel de navegación -----
+        # Un solo lugar donde se decide el orden. Ninguna otra parte del código
+        # depende del índice: todo accede por nombre (self.raspberry_tab, etc.).
+        pantallas = (
+            (self.operacion_tab,   "OPERACIÓN"),            # la de uso diario, primera
+            (self.global_tab,      "SUPERVISIÓN"),
+            (self.pc_tab,          "ESTACIÓN DE\nOPERACIÓN"),
+            (self.raspberry_tab,   "ESTACIÓN DE\nCAMPO"),
+            (self.calibracion_tab, "CALIBRACIÓN"),          # mantenimiento, última
+        )
+
+        self.riel = QWidget()
+        self.riel.setObjectName("riel")
+        self.riel.setFixedWidth(estilo.ANCHO_NAV)
+        lay_riel = QVBoxLayout(self.riel)
+        lay_riel.setContentsMargins(0, 0, 0, 0)
+        lay_riel.setSpacing(0)
+
+        titulo = QLabel("GRÚA T-01")
+        titulo.setObjectName("navTitulo")
+        subtitulo = QLabel("modo automático")
+        subtitulo.setObjectName("navSubtitulo")
+        lay_riel.addWidget(titulo)
+        lay_riel.addWidget(subtitulo)
+
+        # Exclusivo: exactamente una pantalla activa, siempre
+        self.grupo_nav = QButtonGroup(self)
+        self.grupo_nav.setExclusive(True)
+
+        for i, (widget, etiqueta) in enumerate(pantallas):
+            self.paginas.addWidget(widget)
+            b = QPushButton(etiqueta)
+            b.setObjectName("navBtn")
+            b.setCheckable(True)
+            b.setCursor(Qt.PointingHandCursor)   # type: ignore
+            self.grupo_nav.addButton(b, i)
+            lay_riel.addWidget(b)
+
+        lay_riel.addStretch()
+        self.grupo_nav.buttonClicked[int].connect(self.paginas.setCurrentIndex)
+        self.grupo_nav.button(0).setChecked(True)
 
         # Todos los paneles de parada se mantienen sincronizados entre sí
         self.paneles_emergencia = [self.global_tab, self.operacion_tab]
-        #self.tabs.insertTab(1,ControlPCTab(self.ttpower_worker),"Control PC")
-
 
         #--------------------------------------------------------------------
 
         central = QWidget()
-        central.setStyleSheet("background-color: #1e1e1e;")
 
-        main_layout = QVBoxLayout(central)
+        columna = QVBoxLayout()
+        columna.setContentsMargins(0, 0, 0, 0)
+        columna.setSpacing(0)
+        self.title_bar = TitleBar(self)
+        columna.addWidget(self.title_bar)
+        columna.addWidget(self.paginas, 1)
+
+        main_layout = QHBoxLayout(central)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
-
-        self.title_bar = TitleBar(self)
-
-        main_layout.addWidget(self.title_bar)
-        main_layout.addWidget(self.tabs)
+        main_layout.addWidget(self.riel)
+        main_layout.addLayout(columna, 1)
 
         self.setCentralWidget(central)
 
         # ----- Barra de estado -----
         self.status = QStatusBar()
-        self.status.setFixedHeight(28)
+        self.status.setFixedHeight(estilo.ALTO_ESTADO)
         self.setStatusBar(self.status)
-
-        self.status.setStyleSheet("""
-            QStatusBar {
-                background-color: #1f1f1f;
-                color: #ddd;
-                border-top: 1px solid #444;
-            }
-        """)
         
         def make_status_label(text):
             lbl = QLabel(text)
-            lbl.setStyleSheet("""
-                QLabel {
-                    padding: 4px 10px;
-                    border-right: 1px solid #444;
-                    color: #aaa;
-                    font-size: 10pt;
-                }
-            """)
             return lbl
 
         self.lbl_pc       = make_status_label("Operación:")
@@ -1382,12 +1230,12 @@ class MainWindow(QMainWindow):
         self.status.addWidget(self.lbl_esp)
         self.status.addWidget(self.lbl_voz)
 
-        self.set_status(self.lbl_pc, "Operación: OFF", "#f44336")
-        self.set_status(self.lbl_camera, "Visión: OFF", "#f44336")
-        self.set_status(self.lbl_socket, "Enlace: OFF", "#f44336")
-        self.set_status(self.lbl_rpi, "Campo: OFF", "#f44336")
-        self.set_status(self.lbl_esp, "Actuación: OFF", "#f44336")
-        self.set_status(self.lbl_voz, "Voz: en espera", "#787878")
+        self.set_status(self.lbl_pc, "Operación: OFF", estilo.PELIGRO_TEXTO)
+        self.set_status(self.lbl_camera, "Visión: OFF", estilo.PELIGRO_TEXTO)
+        self.set_status(self.lbl_socket, "Enlace: OFF", estilo.PELIGRO_TEXTO)
+        self.set_status(self.lbl_rpi, "Campo: OFF", estilo.PELIGRO_TEXTO)
+        self.set_status(self.lbl_esp, "Actuación: OFF", estilo.PELIGRO_TEXTO)
+        self.set_status(self.lbl_voz, "Voz: en espera", estilo.OFF)
 
         # Logs de prueba
         self.global_tab.add_log("[GUI] Interfaz iniciada correctamente.")     
@@ -1396,65 +1244,68 @@ class MainWindow(QMainWindow):
         """Se dijo 'torre': el sistema espera el comando. Va a la barra de estado
         para que se vea desde cualquier pestaña."""
         if escuchando:
-            self.set_status(self.lbl_voz, "Voz: ESCUCHANDO", "#4caf50")
+            self.set_status(self.lbl_voz, "Voz: ESCUCHANDO", estilo.OK_TEXTO)
         else:
-            self.set_status(self.lbl_voz, "Voz: en espera", "#787878")
+            self.set_status(self.lbl_voz, "Voz: en espera", estilo.OFF)
         self.operacion_tab.set_voz(escuchando)
 
     def update_status(self, code):
         # ---- SSH ----
         if code == "RPi_OK":
-            self.set_status(self.lbl_rpi, "SSH: ON", "#2196f3")
-            self.tabs.widget(2).btn_connect.setEnabled(False)
-            self.tabs.widget(2).btn_start_sepower.setEnabled(True)
+            self.set_status(self.lbl_rpi, "SSH: ON", estilo.ACENTO)
+            self.raspberry_tab.btn_connect.setEnabled(False)
+            self.raspberry_tab.btn_start_sepower.setEnabled(True)
 
         elif code == "RPi_ERR":
             self.rpi_ssh_connected = False
             self.rpi_sepower_running = False
-            self.set_status(self.lbl_rpi, "Campo: ERROR", "#f44336")
-            self.tabs.widget(2).btn_connect.setEnabled(True)
-            self.tabs.widget(2).btn_start_sepower.setEnabled(False)
-            self.tabs.widget(2).btn_stop_sepower.setEnabled(False)
-            self.tabs.widget(2).set_sepower_activo(False)
+            self.set_status(self.lbl_rpi, "Campo: ERROR", estilo.PELIGRO_TEXTO)
+            self.raspberry_tab.btn_connect.setEnabled(True)
+            self.raspberry_tab.btn_start_sepower.setEnabled(False)
+            self.raspberry_tab.btn_stop_sepower.setEnabled(False)
+            self.raspberry_tab.set_sepower_activo(False)
+            self.calibracion_tab.set_sepower_activo(False)
             for panel in self.paneles_emergencia:
                 panel.set_sepower_activo(False)
             self.ssh_worker.esp_ok = False
-            self.set_status(self.lbl_esp, "Actuación: OFF", "#f44336")
+            self.set_status(self.lbl_esp, "Actuación: OFF", estilo.PELIGRO_TEXTO)
 
         # ---- SEpower ----
         elif code == "RPI_SEP_ON":
-            self.set_status(self.lbl_rpi, "Campo: ON", "#4caf50")
-            self.tabs.widget(2).btn_start_sepower.setEnabled(False)
-            self.tabs.widget(2).btn_stop_sepower.setEnabled(True)
-            self.tabs.widget(2).set_sepower_activo(True)
+            self.set_status(self.lbl_rpi, "Campo: ON", estilo.OK_TEXTO)
+            self.raspberry_tab.btn_start_sepower.setEnabled(False)
+            self.raspberry_tab.btn_stop_sepower.setEnabled(True)
+            self.raspberry_tab.set_sepower_activo(True)
+            self.calibracion_tab.set_sepower_activo(True)
             for panel in self.paneles_emergencia:
                 panel.set_sepower_activo(True)
 
         elif code == "RPI_SEP_OFF":
             self.rpi_sepower_running = False
-            self.set_status(self.lbl_rpi, "SSH: ON", "#2196f3")
-            self.tabs.widget(2).btn_connect.setEnabled(False)
-            self.tabs.widget(2).btn_start_sepower.setEnabled(True)
-            self.tabs.widget(2).btn_stop_sepower.setEnabled(False)
-            self.tabs.widget(2).set_sepower_activo(False)
+            self.set_status(self.lbl_rpi, "SSH: ON", estilo.ACENTO)
+            self.raspberry_tab.btn_connect.setEnabled(False)
+            self.raspberry_tab.btn_start_sepower.setEnabled(True)
+            self.raspberry_tab.btn_stop_sepower.setEnabled(False)
+            self.raspberry_tab.set_sepower_activo(False)
+            self.calibracion_tab.set_sepower_activo(False)
             for panel in self.paneles_emergencia:
                 panel.set_sepower_activo(False)
             self.ssh_worker.esp_ok = False
-            self.set_status(self.lbl_esp, "Actuación: OFF", "#f44336")
+            self.set_status(self.lbl_esp, "Actuación: OFF", estilo.PELIGRO_TEXTO)
 
         # ---- PC ----
         
         elif code == "PC_ON":
-            self.set_status(self.lbl_pc, "Operación: Percepción ON", "#4caf50")
+            self.set_status(self.lbl_pc, "Operación: Percepción ON", estilo.OK_TEXTO)
 
-            pc_tab = self.tabs.widget(1)  # Control PC
+            pc_tab = self.pc_tab
             pc_tab.btn_start.setEnabled(False)
             pc_tab.btn_stop.setEnabled(True)
 
         elif code == "PC_OFF":
-            self.set_status(self.lbl_pc, "Operación: Percepción OFF", "#f44336")
+            self.set_status(self.lbl_pc, "Operación: Percepción OFF", estilo.PELIGRO_TEXTO)
 
-            pc_tab = self.tabs.widget(1)
+            pc_tab = self.pc_tab
             pc_tab.btn_start.setEnabled(True)
             pc_tab.btn_stop.setEnabled(False)
             
@@ -1463,20 +1314,20 @@ class MainWindow(QMainWindow):
         # OJO: estos estados NO tocan los botones. Los reintentos de conexión
         # emiten SOCKET_OFF/CAMARA_OFF constantemente y dejaban "Detener" gris.
         elif code == "SOCKET_ON":
-            self.set_status(self.lbl_socket, "Enlace: ON", "#4caf50")
+            self.set_status(self.lbl_socket, "Enlace: ON", estilo.OK_TEXTO)
             self.operacion_tab.set_lampara("socket", "ok")
 
         elif code == "SOCKET_OFF":
-            self.set_status(self.lbl_socket, "Enlace: OFF", "#f44336")
+            self.set_status(self.lbl_socket, "Enlace: OFF", estilo.PELIGRO_TEXTO)
             self.operacion_tab.set_lampara("socket", "mal")
 
         # ---- Camara ----
         elif code == "CAMARA_ON":
-            self.set_status(self.lbl_camera, "Visión: ON", "#4caf50")
+            self.set_status(self.lbl_camera, "Visión: ON", estilo.OK_TEXTO)
             self.operacion_tab.set_lampara("camara", "ok")
 
         elif code == "CAMARA_OFF":
-            self.set_status(self.lbl_camera, "Visión: OFF", "#f44336")
+            self.set_status(self.lbl_camera, "Visión: OFF", estilo.PELIGRO_TEXTO)
             self.operacion_tab.set_lampara("camara", "mal")
         
         # ---- Parada de emergencia ----
@@ -1494,24 +1345,19 @@ class MainWindow(QMainWindow):
 
         # ---- ESP32 ----
         elif code == "ESP32_ON":
-            self.set_status(self.lbl_esp, "Actuación: ON", "#4caf50")
+            self.set_status(self.lbl_esp, "Actuación: ON", estilo.OK_TEXTO)
             self.operacion_tab.set_lampara("esp", "ok")
 
         elif code == "ESP32_OFF":
-            self.set_status(self.lbl_esp, "Actuación: OFF", "#f44336")
+            self.set_status(self.lbl_esp, "Actuación: OFF", estilo.PELIGRO_TEXTO)
             self.operacion_tab.set_lampara("esp", "mal")
         
     def set_status(self, label, text, color):
-            label.setText(text)
-            label.setStyleSheet(f"""
-                QLabel {{
-                    padding: 4px 10px;
-                    border-right: 1px solid #444;
-                    font-size: 10pt;
-                    font-weight: bold;
-                    color: {color};
-                }}
-            """)
+        label.setText(text)
+        label.setStyleSheet(
+            "padding: 6px 14px; border-right: 1px solid %s;"
+            "font-size: %dpx; font-weight: 700; color: %s;"
+            % (estilo.BORDE, estilo.F_ETIQUETA, color))
 
     def closeEvent(self, event):
         # Cerrar la GUI tiene que llevarse todo: si no, TTpower y sus
@@ -1542,6 +1388,10 @@ class SSHWorker(QThread):
     ocupacion_signal = pyqtSignal(dict) # {"caja_0": True, ...}
     ir_signal = pyqtSignal(bool)        # True = haz cortado (hay objeto)
     evento_signal = pyqtSignal(str)     # texto corto del último evento relevante
+    calib_c_signal = pyqtSignal(int)                 # altura actual del jog
+    calib_pose_signal = pyqtSignal(str, str, int)    # punto, cual, altura
+    calib_tabla_signal = pyqtSignal(dict)            # tabla completa de alturas
+    calib_error_signal = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -1556,7 +1406,7 @@ class SSHWorker(QThread):
             self.client = paramiko.SSHClient()
             self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             self.client.connect(
-                hostname=IP_RPI,
+                hostname=config_red.ip_rpi(),
                 username="grua",
                 password="grua",
                 timeout=5
@@ -1616,6 +1466,11 @@ class SSHWorker(QThread):
             if mapa:
                 self.ocupacion_signal.emit(mapa)
 
+        if linea.startswith("[CALIB][ERR]"):
+            self.calib_error_signal.emit(linea[12:].strip())
+        elif linea.startswith("[CALIB]"):
+            self._analizar_calib(linea[7:].strip())
+
         if linea.startswith("[IR] HAZ="):
             self.ir_signal.emit(linea.strip().endswith("0"))   # 0 = haz cortado
 
@@ -1666,6 +1521,22 @@ class SSHWorker(QThread):
         ("sepower detenido",                  "Control de Campo detenido"),
     ]
 
+    def _analizar_calib(self, resto):
+        """Marcadores del panel de Calibración: TABLA, POSE y C=.
+
+        Los nombres de punto llevan espacios ("bidon uno_0"), por eso el POSE se
+        parte desde la derecha."""
+        try:
+            if resto.startswith("TABLA "):
+                self.calib_tabla_signal.emit(json.loads(resto[6:]))
+            elif resto.startswith("POSE "):
+                punto, cual, c = resto[5:].rsplit(" ", 2)
+                self.calib_pose_signal.emit(punto, cual, int(float(c.split("=")[1])))
+            elif resto.startswith("C="):
+                self.calib_c_signal.emit(int(float(resto[2:])))
+        except (ValueError, IndexError, KeyError):
+            pass
+
     def _detectar_evento(self, linea, bajo):
         for fragmento, texto in self.EVENTOS:
             if fragmento in bajo:
@@ -1700,6 +1571,9 @@ class TTpowerWorker(QThread):
         env = os.environ.copy()
         env["TT_GUI"] = "1"          # activa modo GUI en TTpower
         env["PYTHONUNBUFFERED"] = "1"
+        # Que TTpower use exactamente la misma IP que el HMI, sin releer nada
+        env["TT_IP_RPI"] = config_red.ip_rpi()
+        env["TT_IP_CAMARA"] = config_red.ip_camara()
 
         # Grupo de procesos propio: permite pedir un cierre ordenado con
         # CTRL_BREAK y, si no alcanza, matar el árbol entero con taskkill.
@@ -1821,6 +1695,7 @@ class TTpowerWorker(QThread):
 # ---------------------------
 def main():
     app = QApplication(sys.argv)
+    app.setStyleSheet(estilo.hoja_global())   # una sola hoja para toda la app
     win = MainWindow()
     win.show()
     sys.exit(app.exec_())
